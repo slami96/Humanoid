@@ -20,17 +20,9 @@
         }
         /* Basic loading indicator style */
         #loading-indicator {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 1.2em;
-            background-color: rgba(0,0,0,0.5);
-            padding: 10px 15px;
-            border-radius: 8px;
-            display: none; /* Hidden by default */
-            z-index: 10; /* Ensure it's above the canvas */
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; font-size: 1.2em; background-color: rgba(0,0,0,0.5);
+            padding: 10px 15px; border-radius: 8px; display: none; z-index: 10;
         }
     </style>
 </head>
@@ -72,17 +64,48 @@
         const infoContent = document.getElementById('info-content');
         const loadingIndicator = document.getElementById('loading-indicator');
 
+        // --- Bounding Box Zones for Click Detection ---
+        // These are ESTIMATES based on a model scaled to ~3 units high, centered at origin, base at Y=0.
+        // *** You WILL likely need to ADJUST these min/max values for your specific model! ***
+        const headZone = new THREE.Box3(
+            new THREE.Vector3(-0.4, 2.4, -0.4), // min X, Y, Z
+            new THREE.Vector3(0.4, 3.1, 0.4)   // max X, Y, Z
+        );
+        const torsoZone = new THREE.Box3(
+            new THREE.Vector3(-0.5, 0.9, -0.35),
+            new THREE.Vector3(0.5, 2.4, 0.35)
+        );
+        // Arms are tricky with boxes, these are wide estimates
+        const leftArmZone = new THREE.Box3(
+            new THREE.Vector3(-1.0, 0.8, -0.4), // Wider X range on negative side
+            new THREE.Vector3(-0.4, 2.3, 0.4)
+        );
+        const rightArmZone = new THREE.Box3(
+            new THREE.Vector3(0.4, 0.8, -0.4),  // Wider X range on positive side
+            new THREE.Vector3(1.0, 2.3, 0.4)
+        );
+         // Legs - combined zone for simplicity first
+        const legsZone = new THREE.Box3(
+            new THREE.Vector3(-0.5, 0.0, -0.4), // Covers both legs roughly
+            new THREE.Vector3(0.5, 1.0, 0.4)
+        );
+        // You could define separate left/right leg zones if needed:
+        // const leftLegZone = new THREE.Box3(new THREE.Vector3(-0.5, 0.0, -0.3), new THREE.Vector3(-0.1, 1.0, 0.3));
+        // const rightLegZone = new THREE.Box3(new THREE.Vector3(0.1, 0.0, -0.3), new THREE.Vector3(0.5, 1.0, 0.3));
+
+        // Optional: Add Box3Helpers to visualize the zones during development
+        let zoneHelpers = []; // To hold helpers if we add them
+
+
         // --- Initialization ---
         function init() {
             // Scene
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x111827); // Dark background
+            scene.background = new THREE.Color(0x111827);
 
             // Camera
             camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
-            // *** ADJUSTED CAMERA POSITION: Moved further back (Z=5) and slightly lower (Y=1.2) ***
-            // *** You might need to fine-tune these values based on your model's size/pivot ***
-            camera.position.set(0, 1.2, 5);
+            camera.position.set(0, 1.2, 5); // Keep adjusted position
 
             // Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -102,15 +125,13 @@
 
             // Controls
             controls = new OrbitControls(camera, renderer.domElement);
-            // *** ADJUSTED CONTROLS TARGET: Aim near the model's likely center ***
-            // *** Fine-tune Y value (1.0) if the model's center is higher/lower ***
-            controls.target.set(0, 1.0, 0);
+            controls.target.set(0, 1.0, 0); // Keep adjusted target
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
             controls.screenSpacePanning = false;
             controls.minDistance = 1;
             controls.maxDistance = 20;
-            controls.update(); // Important after setting target
+            controls.update();
 
             // Raycaster
             raycaster = new THREE.Raycaster();
@@ -118,65 +139,64 @@
 
             // --- Load GLTF/GLB Model ---
             const loader = new GLTFLoader();
-            const modelUrl = './human_body.glb'; // Assumes in root
-
+            const modelUrl = './human_body.glb';
             loadingIndicator.style.display = 'block';
 
             loader.load(
                 modelUrl,
-                // Success callback
-                function (gltf) {
+                function (gltf) { // Success
                     loadingIndicator.style.display = 'none';
                     model = gltf.scene;
 
-                    // --- Center and Scale Model (Optional but Recommended) ---
-                    // Calculate bounding box
+                    // --- Center and Scale Model ---
                     const box = new THREE.Box3().setFromObject(model);
                     const center = box.getCenter(new THREE.Vector3());
                     const size = box.getSize(new THREE.Vector3());
-
-                    // Rescale model to fit within a certain size (e.g., height of 3 units)
                     const maxDim = Math.max(size.x, size.y, size.z);
-                    const desiredHeight = 3.0; // Target height for the model
+                    const desiredHeight = 3.0;
                     const scale = desiredHeight / maxDim;
                     model.scale.set(scale, scale, scale);
-
-                    // Recalculate box after scaling
-                    box.setFromObject(model);
-                    box.getCenter(center); // Update center based on new scale
-
-                    // Reposition model so its bottom rests near the origin's Y=0
+                    box.setFromObject(model); // Recalculate box after scaling
+                    box.getCenter(center); // Update center
                     model.position.sub(center); // Move center to origin
-                    model.position.y += (size.y * scale / 2); // Lift model so bottom is at y=0
-
-                    // Adjust controls target to new center AFTER scaling/positioning
-                    // controls.target.copy(model.position).add(new THREE.Vector3(0, size.y * scale / 2, 0)); // Target center mass
-                    controls.target.set(0, size.y * scale * 0.5, 0); // Target vertical center after repositioning
-                    controls.update();
-                    // --- End Centering and Scaling ---
-
+                    model.position.y += (size.y * scale / 2); // Lift model base to y=0
+                    // --- End Centering ---
 
                     scene.add(model);
 
-                    console.log('Model loaded successfully:', model);
-                    model.traverse((child) => {
-                        if (child.isMesh) {
-                            console.log('Found mesh:', child.name, child);
-                        }
-                    });
+                    // Adjust controls target based on final model position/size
+                    controls.target.set(model.position.x, model.position.y + (size.y * scale * 0.5), model.position.z);
+                    controls.update();
 
+
+                    console.log('Model loaded successfully. Scaled height approx:', size.y * scale);
                     updateInfoPanel('', 'Model loaded. Click on a body part.');
+
+
+                    // --- Optional: Visualize Bounding Boxes ---
+                    // Uncomment this section to see the boxes in the scene (useful for adjusting coords)
+                    /*
+                    const colors = { head: 0xff0000, torso: 0x00ff00, leftArm: 0x0000ff, rightArm: 0xffff00, legs: 0xff00ff };
+                    zoneHelpers.push(new THREE.Box3Helper(headZone, colors.head));
+                    zoneHelpers.push(new THREE.Box3Helper(torsoZone, colors.torso));
+                    zoneHelpers.push(new THREE.Box3Helper(leftArmZone, colors.leftArm));
+                    zoneHelpers.push(new THREE.Box3Helper(rightArmZone, colors.rightArm));
+                    zoneHelpers.push(new THREE.Box3Helper(legsZone, colors.legs));
+                    zoneHelpers.forEach(helper => scene.add(helper));
+                    console.log("Added zone helpers to scene.");
+                    */
+                    // --- End Visualize ---
+
+
                 },
-                // Progress callback
-                function (xhr) {
+                function (xhr) { // Progress
                     const percentLoaded = Math.round((xhr.loaded / xhr.total) * 100);
                     loadingIndicator.textContent = `Loading Model... ${percentLoaded}%`;
                 },
-                // Error callback
-                function (error) {
+                function (error) { // Error
                     loadingIndicator.style.display = 'none';
                     console.error('An error happened loading the model:', error);
-                    infoContent.innerHTML = `<p class="text-red-500">Error loading 3D model (${modelUrl}). Check file path/integrity. See console.</p>`;
+                    infoContent.innerHTML = `<p class="text-red-500">Error loading 3D model. Check path/integrity.</p>`;
                 }
             );
             // --- End Model Loading ---
@@ -199,62 +219,46 @@
 
         // --- Handle Click Events ---
         function onClick(event) {
-            if (!model) return;
+            if (!model) return; // Model not loaded yet
 
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(model, true);
+            const intersects = raycaster.intersectObject(model, true); // Still intersect the model
 
             if (intersects.length > 0) {
-                const clickedObject = intersects[0].object;
-                // *** ADDED DETAILED LOGGING ***
-                console.log('Intersection Data:', intersects[0]);
-                console.log('Clicked Object Raw:', clickedObject);
+                // *** Get the exact 3D point of intersection ***
+                const clickPoint = intersects[0].point;
+                console.log('Click Point Coordinates:', clickPoint); // Log the coordinates
 
-                // *** REFINED NAME DETECTION ***
-                let objectName = clickedObject.name;
-                let parentName = clickedObject.parent ? clickedObject.parent.name : null;
-                console.log(`Clicked Mesh Name: "${objectName}", Parent Name: "${parentName}"`);
+                let partName = 'Unknown Area'; // Default
+                let description = 'Clicked on an unclassified part of the model.';
 
-                let partName = 'Unknown Part'; // Default
-                let description = `You clicked on an object.`;
-
-                // Try to find the most specific useful name
-                if (objectName && objectName !== '' && !objectName.toLowerCase().includes('group')) {
-                    // Use the mesh's own name if it seems specific
-                    partName = objectName;
-                } else if (parentName && parentName !== '' && parentName !== 'Scene' && !parentName.toLowerCase().includes('group')) {
-                    // Fallback to parent's name if mesh name isn't useful
-                    partName = parentName;
-                } else if (objectName && objectName !== '') {
-                     // Use the object name even if it includes 'group' as a last resort before 'Unknown'
-                     partName = objectName;
+                // *** Check which predefined zone contains the click point ***
+                // Order matters: check smaller/more specific zones first if they overlap
+                if (headZone.containsPoint(clickPoint)) {
+                    partName = 'Head';
+                    description = 'The head contains the brain, sensory organs (eyes, ears, nose, mouth), etc.';
+                } else if (leftArmZone.containsPoint(clickPoint)) {
+                    partName = 'Left Arm';
+                    description = 'The left arm, used for reaching, lifting, etc.';
+                } else if (rightArmZone.containsPoint(clickPoint)) {
+                    partName = 'Right Arm';
+                    description = 'The right arm, used for reaching, lifting, etc.';
+                } else if (torsoZone.containsPoint(clickPoint)) {
+                    // Check torso after arms in case arms overlap torso zone slightly
+                    partName = 'Torso / Chest';
+                    description = 'The torso houses vital organs like the heart, lungs, liver, stomach, etc.';
+                } else if (legsZone.containsPoint(clickPoint)) {
+                    partName = 'Legs / Lower Body';
+                    description = 'Legs provide support, balance, and locomotion.';
+                    // If using separate leg zones:
+                    // if (leftLegZone.containsPoint(clickPoint)) partName = 'Left Leg';
+                    // else if (rightLegZone.containsPoint(clickPoint)) partName = 'Right Leg';
                 }
-                 // If partName is still 'Unknown Part', it means neither mesh nor parent had a useful name.
-
-                description = `Clicked: ${partName}`; // Default description using the best name found
-
-                // *** APPLY SPECIFIC INFO BASED ON THE DETERMINED partName ***
-                if (partName.toLowerCase().includes('head')) {
-                     partName = 'Head'; // Clean up name
-                     description = 'The head contains the brain, sensory organs (eyes, ears, nose, mouth), and the start of the digestive/respiratory tracts.';
-                } else if (partName.toLowerCase().includes('chest') || partName.toLowerCase().includes('torso')) {
-                     partName = 'Chest/Torso';
-                     description = 'The torso houses vital organs like the heart, lungs, liver, stomach, and intestines.';
-                } else if (partName.toLowerCase().includes('arm')) {
-                     partName = 'Arm';
-                     description = 'Arms are used for reaching, grasping, lifting, and interacting with the environment.';
-                } else if (partName.toLowerCase().includes('leg')) {
-                     partName = 'Leg';
-                     description = 'Legs provide support, balance, and locomotion (walking, running).';
-                } else if (partName.toLowerCase().includes('foot') || partName.toLowerCase().includes('feet')) {
-                     partName = 'Foot / Feet';
-                     description = 'Feet provide support, balance, and absorb shock during movement.';
-                }
-                // *** Add more 'else if' conditions here based on the names you see logged in the console ***
+                // *** Add more zones or refine existing ones as needed ***
 
                 updateInfoPanel(partName, description);
 
@@ -266,19 +270,17 @@
 
         // --- Update Information Panel ---
         function updateInfoPanel(title, text) {
-            // Ensure title is treated as a string, even if it's null/undefined from name checks
             const displayTitle = title || 'Info';
             infoContent.innerHTML = `
                 <h3 class="text-xl font-semibold mb-2 text-blue-400">${displayTitle}</h3>
                 <p>${text}</p>
             `;
-             if (!title && !text) { // Handle case where both are empty (e.g., background click)
+             if (!title && !text) {
                  infoContent.innerHTML = `<p class="text-gray-400">Click on a body part.</p>`;
-             } else if (!title) { // Handle case where only title is missing
+             } else if (!title) {
                  infoContent.innerHTML = `<p>${text}</p>`;
              }
         }
-
 
         // --- Animation Loop ---
         function animate() {
