@@ -9,7 +9,7 @@
         /* Basic styling for body and canvas */
         body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; }
         /* Ensure canvas fills its container */
-        #canvas-container { flex-grow: 1; height: 100vh; position: relative; /* Needed for absolute positioning of loader/error messages if added */ }
+        #canvas-container { flex-grow: 1; height: 100vh; position: relative; }
         #canvas-container canvas { display: block; width: 100%; height: 100%; }
         /* Style for the info panel */
         #info-panel {
@@ -18,12 +18,7 @@
             overflow-y: auto;
             flex-shrink: 0; /* Prevent info panel from shrinking */
         }
-        /* Style for highlighted state (example) */
-        .highlighted {
-            /* Example: Outline the clicked mesh - Requires more complex material handling */
-            /* outline: 2px solid yellow; */
-        }
-        /* Basic loading indicator style (optional) */
+        /* Basic loading indicator style */
         #loading-indicator {
             position: absolute;
             top: 50%;
@@ -35,6 +30,7 @@
             padding: 10px 15px;
             border-radius: 8px;
             display: none; /* Hidden by default */
+            z-index: 10; /* Ensure it's above the canvas */
         }
     </style>
 </head>
@@ -45,7 +41,7 @@
             <h2 class="text-2xl font-bold mb-4">Body Information</h2>
             <div id="info-content">
                 <p class="text-gray-400">Loading model... Click on a body part after it appears.</p>
-                </div>
+            </div>
         </div>
 
         <div id="canvas-container">
@@ -66,14 +62,12 @@
         // Import necessary Three.js modules
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        // *** STEP 1: Import GLTFLoader ***
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
         // --- Global Variables ---
         let scene, camera, renderer, controls;
         let raycaster, mouse;
         let model; // Will hold the loaded GLB model scene
-        // let placeholderMesh; // Placeholder no longer primary, keep commented out or remove
         const canvasContainer = document.getElementById('canvas-container');
         const infoContent = document.getElementById('info-content');
         const loadingIndicator = document.getElementById('loading-indicator');
@@ -86,104 +80,106 @@
 
             // Camera
             camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 4); // Adjust camera position slightly for a typical human model view
+            // *** ADJUSTED CAMERA POSITION: Moved further back (Z=5) and slightly lower (Y=1.2) ***
+            // *** You might need to fine-tune these values based on your model's size/pivot ***
+            camera.position.set(0, 1.2, 5);
 
             // Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
-            canvasContainer.appendChild(renderer.domElement); // Add canvas to the container
+            canvasContainer.appendChild(renderer.domElement);
 
             // Lights
-            const ambientLight = new THREE.AmbientLight(0xffffff, 1.0); // Slightly brighter ambient
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
             scene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5); // Keep directional light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
             directionalLight.position.set(5, 10, 7.5);
             scene.add(directionalLight);
-            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.8); // Add another light from a different angle
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.8);
             directionalLight2.position.set(-5, -5, -7.5);
             scene.add(directionalLight2);
 
-
             // Controls
             controls = new OrbitControls(camera, renderer.domElement);
-            controls.target.set(0, 1, 0); // Point controls towards the center of a typical human model height
+            // *** ADJUSTED CONTROLS TARGET: Aim near the model's likely center ***
+            // *** Fine-tune Y value (1.0) if the model's center is higher/lower ***
+            controls.target.set(0, 1.0, 0);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
             controls.screenSpacePanning = false;
-            controls.minDistance = 1; // Adjust min distance
-            controls.maxDistance = 20; // Adjust max distance
+            controls.minDistance = 1;
+            controls.maxDistance = 20;
             controls.update(); // Important after setting target
 
             // Raycaster
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
 
-            // --- Remove or Comment Out Placeholder ---
-            /*
-            const geometry = new THREE.SphereGeometry(1.5, 32, 32);
-            const material = new THREE.MeshStandardMaterial({ color: 0x3b82f6, metalness: 0.3, roughness: 0.6 });
-            placeholderMesh = new THREE.Mesh(geometry, material);
-            placeholderMesh.name = "Placeholder Body";
-            scene.add(placeholderMesh);
-            */
-            // --- End Placeholder ---
-
-            // --- STEP 2 & 4: Load your GLTF/GLB Model ---
+            // --- Load GLTF/GLB Model ---
             const loader = new GLTFLoader();
-            // *** STEP 3: Set correct path to your model ***
-            const modelUrl = './human_body.glb'; // Assumes human_body.glb is in the same folder as the HTML file
+            const modelUrl = './human_body.glb'; // Assumes in root
 
-            loadingIndicator.style.display = 'block'; // Show loading indicator
+            loadingIndicator.style.display = 'block';
 
             loader.load(
                 modelUrl,
                 // Success callback
                 function (gltf) {
-                    loadingIndicator.style.display = 'none'; // Hide loading indicator
-                    model = gltf.scene; // Assign the loaded scene graph to the global 'model' variable
+                    loadingIndicator.style.display = 'none';
+                    model = gltf.scene;
 
-                    // --- Optional: Adjust model scale, position, rotation ---
-                    // model.scale.set(0.5, 0.5, 0.5); // Example: Make model half size
-                    model.position.set(0, 0, 0); // Center the model at the origin
-                    // model.rotation.y = Math.PI; // Example: Rotate model 180 degrees
+                    // --- Center and Scale Model (Optional but Recommended) ---
+                    // Calculate bounding box
+                    const box = new THREE.Box3().setFromObject(model);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
 
-                    // *** Add the loaded model to the scene ***
+                    // Rescale model to fit within a certain size (e.g., height of 3 units)
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const desiredHeight = 3.0; // Target height for the model
+                    const scale = desiredHeight / maxDim;
+                    model.scale.set(scale, scale, scale);
+
+                    // Recalculate box after scaling
+                    box.setFromObject(model);
+                    box.getCenter(center); // Update center based on new scale
+
+                    // Reposition model so its bottom rests near the origin's Y=0
+                    model.position.sub(center); // Move center to origin
+                    model.position.y += (size.y * scale / 2); // Lift model so bottom is at y=0
+
+                    // Adjust controls target to new center AFTER scaling/positioning
+                    // controls.target.copy(model.position).add(new THREE.Vector3(0, size.y * scale / 2, 0)); // Target center mass
+                    controls.target.set(0, size.y * scale * 0.5, 0); // Target vertical center after repositioning
+                    controls.update();
+                    // --- End Centering and Scaling ---
+
+
                     scene.add(model);
 
-                    // --- Optional: Log model structure to console for debugging ---
                     console.log('Model loaded successfully:', model);
                     model.traverse((child) => {
                         if (child.isMesh) {
                             console.log('Found mesh:', child.name, child);
-                            // You might assign userData here based on names if they exist
-                            // if (child.name.includes('Head')) child.userData.bodyPart = 'Head';
-                            // else if (child.name.includes('Arm')) child.userData.bodyPart = 'Arm';
-                            // ... etc ...
                         }
                     });
-                    // --- End Debugging ---
 
-                    // Update info panel now that model is loaded
                     updateInfoPanel('', 'Model loaded. Click on a body part.');
-
                 },
-                // Progress callback (optional)
+                // Progress callback
                 function (xhr) {
                     const percentLoaded = Math.round((xhr.loaded / xhr.total) * 100);
-                    console.log(percentLoaded + '% loaded');
                     loadingIndicator.textContent = `Loading Model... ${percentLoaded}%`;
                 },
                 // Error callback
                 function (error) {
-                    loadingIndicator.style.display = 'none'; // Hide loading indicator
+                    loadingIndicator.style.display = 'none';
                     console.error('An error happened loading the model:', error);
-                    infoContent.innerHTML = `<p class="text-red-500">Error loading 3D model (${modelUrl}). Check the file path and ensure the file is in the repository. See console for details.</p>`;
-                    // Optionally add a fallback or message
+                    infoContent.innerHTML = `<p class="text-red-500">Error loading 3D model (${modelUrl}). Check file path/integrity. See console.</p>`;
                 }
             );
             // --- End Model Loading ---
-
 
             // Event Listeners
             window.addEventListener('resize', onWindowResize);
@@ -195,7 +191,7 @@
 
         // --- Handle Window Resize ---
         function onWindowResize() {
-            if (!renderer || !camera || !canvasContainer) return; // Check if initialized
+            if (!renderer || !camera || !canvasContainer) return;
             camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
@@ -203,34 +199,47 @@
 
         // --- Handle Click Events ---
         function onClick(event) {
-            if (!model) return; // Don't do anything if the model hasn't loaded yet
+            if (!model) return;
 
-            // Calculate mouse position in normalized device coordinates (-1 to +1)
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-            // Update the picking ray
             raycaster.setFromCamera(mouse, camera);
-
-            // *** STEP 5: Check intersections with the loaded model ***
-            // Pass the 'model' object (the loaded scene group) and 'true' to check recursively through all its children (meshes)
             const intersects = raycaster.intersectObject(model, true);
 
             if (intersects.length > 0) {
-                // An object (part of your model) was clicked!
-                const clickedObject = intersects[0].object; // Get the specific mesh that was clicked
-                console.log('Clicked object:', clickedObject); // Log the clicked object details to the console
+                const clickedObject = intersects[0].object;
+                // *** ADDED DETAILED LOGGING ***
+                console.log('Intersection Data:', intersects[0]);
+                console.log('Clicked Object Raw:', clickedObject);
 
-                // --- STEP 6: Display Information (Basic Example) ---
-                // Attempt to get a meaningful name or identifier
-                let partName = clickedObject.name || 'Unnamed Part'; // Use mesh name if available
-                let description = `You clicked on: ${partName}.`;
+                // *** REFINED NAME DETECTION ***
+                let objectName = clickedObject.name;
+                let parentName = clickedObject.parent ? clickedObject.parent.name : null;
+                console.log(`Clicked Mesh Name: "${objectName}", Parent Name: "${parentName}"`);
 
-                // *** IMPORTANT: Add specific logic here based on your model's structure ***
-                // If your meshes have names like 'Head_Mesh', 'Arm_L_Mesh', etc.:
+                let partName = 'Unknown Part'; // Default
+                let description = `You clicked on an object.`;
+
+                // Try to find the most specific useful name
+                if (objectName && objectName !== '' && !objectName.toLowerCase().includes('group')) {
+                    // Use the mesh's own name if it seems specific
+                    partName = objectName;
+                } else if (parentName && parentName !== '' && parentName !== 'Scene' && !parentName.toLowerCase().includes('group')) {
+                    // Fallback to parent's name if mesh name isn't useful
+                    partName = parentName;
+                } else if (objectName && objectName !== '') {
+                     // Use the object name even if it includes 'group' as a last resort before 'Unknown'
+                     partName = objectName;
+                }
+                 // If partName is still 'Unknown Part', it means neither mesh nor parent had a useful name.
+
+                description = `Clicked: ${partName}`; // Default description using the best name found
+
+                // *** APPLY SPECIFIC INFO BASED ON THE DETERMINED partName ***
                 if (partName.toLowerCase().includes('head')) {
-                     partName = 'Head';
+                     partName = 'Head'; // Clean up name
                      description = 'The head contains the brain, sensory organs (eyes, ears, nose, mouth), and the start of the digestive/respiratory tracts.';
                 } else if (partName.toLowerCase().includes('chest') || partName.toLowerCase().includes('torso')) {
                      partName = 'Chest/Torso';
@@ -241,51 +250,44 @@
                 } else if (partName.toLowerCase().includes('leg')) {
                      partName = 'Leg';
                      description = 'Legs provide support, balance, and locomotion (walking, running).';
+                } else if (partName.toLowerCase().includes('foot') || partName.toLowerCase().includes('feet')) {
+                     partName = 'Foot / Feet';
+                     description = 'Feet provide support, balance, and absorb shock during movement.';
                 }
-                 // Add more specific checks based on the names you find when logging `clickedObject.name`
-
-                // Or, if you assigned userData in the loader:
-                // if (clickedObject.userData.bodyPart) {
-                //     partName = clickedObject.userData.bodyPart;
-                //     description = `Information about the ${partName}.`;
-                //     // Add specific descriptions...
-                // }
+                // *** Add more 'else if' conditions here based on the names you see logged in the console ***
 
                 updateInfoPanel(partName, description);
 
-                // Optional: Add visual feedback (highlighting) - this is more advanced
-                // highlightObject(clickedObject);
-
             } else {
-                // Clicked on the background, clear info
+                // Clicked on the background
                 updateInfoPanel('', 'Click on a body part in the model.');
-                // Optional: Remove any highlighting
-                // unhighlightAll();
             }
         }
 
         // --- Update Information Panel ---
         function updateInfoPanel(title, text) {
-            if (title) {
-                infoContent.innerHTML = `
-                    <h3 class="text-xl font-semibold mb-2 text-blue-400">${title}</h3>
-                    <p>${text}</p>
-                `;
-            } else {
-                // Keep placeholder text if title is empty but text is provided
-                infoContent.innerHTML = `<p class="text-gray-400">${text || 'Click on a body part.'}</p>`;
-            }
+            // Ensure title is treated as a string, even if it's null/undefined from name checks
+            const displayTitle = title || 'Info';
+            infoContent.innerHTML = `
+                <h3 class="text-xl font-semibold mb-2 text-blue-400">${displayTitle}</h3>
+                <p>${text}</p>
+            `;
+             if (!title && !text) { // Handle case where both are empty (e.g., background click)
+                 infoContent.innerHTML = `<p class="text-gray-400">Click on a body part.</p>`;
+             } else if (!title) { // Handle case where only title is missing
+                 infoContent.innerHTML = `<p>${text}</p>`;
+             }
         }
+
 
         // --- Animation Loop ---
         function animate() {
             requestAnimationFrame(animate);
-            if (controls) controls.update(); // Update controls only if they exist
-            if (renderer) renderer.render(scene, camera); // Render scene only if renderer exists
+            if (controls) controls.update();
+            if (renderer) renderer.render(scene, camera);
         }
 
         // --- Start ---
-        // Ensure DOM is fully loaded before initializing Three.js
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
