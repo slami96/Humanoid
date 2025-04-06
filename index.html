@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Human Anatomy Explorer | Interactive 3D Learning</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Roboto:wght@300;400;500&display=swap">
     <style>
         /* Custom Science/Space Theme */
@@ -486,7 +485,7 @@
         const soundHover = document.getElementById('sound-hover');
         const soundScan = document.getElementById('sound-scan');
 
-        // Detailed information for each body part
+        // Detailed information for each body part with expanded zones
         const bodyPartsData = {
             head: {
                 name: "Head",
@@ -503,9 +502,10 @@
                     "Initiates digestion through the mouth",
                     "Protects the brain from trauma"
                 ],
+                // EXPANDED zone for head
                 zone: new THREE.Box3(
-                    new THREE.Vector3(-0.4, 2.4, -0.4),
-                    new THREE.Vector3(0.4, 3.1, 0.4)
+                    new THREE.Vector3(-0.6, 2.0, -0.6),
+                    new THREE.Vector3(0.6, 3.3, 0.6)
                 )
             },
             chest: {
@@ -523,9 +523,10 @@
                     "Connects respiratory and digestive systems",
                     "Supports upper body mobility"
                 ],
+                // EXPANDED zone for chest
                 zone: new THREE.Box3(
-                    new THREE.Vector3(-0.5, 0.9, -0.35),
-                    new THREE.Vector3(0.5, 2.4, 0.35)
+                    new THREE.Vector3(-0.8, 0.9, -0.6),
+                    new THREE.Vector3(0.8, 2.0, 0.6)
                 )
             },
             abdomen: {
@@ -543,9 +544,10 @@
                     "Detoxifies harmful substances",
                     "Stores energy in the form of glycogen and fat"
                 ],
+                // EXPANDED zone for abdomen
                 zone: new THREE.Box3(
-                    new THREE.Vector3(-0.5, 0.0, -0.35),
-                    new THREE.Vector3(0.5, 0.9, 0.35)
+                    new THREE.Vector3(-0.8, -0.5, -0.6),
+                    new THREE.Vector3(0.8, 0.9, 0.6)
                 )
             },
             leftArm: {
@@ -563,9 +565,10 @@
                     "Assists with balance and coordination",
                     "Enables pushing and pulling motions"
                 ],
+                // EXPANDED zone for left arm
                 zone: new THREE.Box3(
-                    new THREE.Vector3(-1.0, 0.8, -0.4),
-                    new THREE.Vector3(-0.4, 2.3, 0.4)
+                    new THREE.Vector3(-1.5, 0.0, -0.6),
+                    new THREE.Vector3(-0.4, 2.3, 0.6)
                 )
             },
             rightArm: {
@@ -583,9 +586,10 @@
                     "Assists with balance and coordination",
                     "Enables pushing and pulling motions"
                 ],
+                // EXPANDED zone for right arm
                 zone: new THREE.Box3(
-                    new THREE.Vector3(0.4, 0.8, -0.4),
-                    new THREE.Vector3(1.0, 2.3, 0.4)
+                    new THREE.Vector3(0.4, 0.0, -0.6),
+                    new THREE.Vector3(1.5, 2.3, 0.6)
                 )
             },
             legs: {
@@ -603,9 +607,10 @@
                     "Absorbs impact during movement",
                     "Assists in generating force for physical activities"
                 ],
+                // EXPANDED zone for legs
                 zone: new THREE.Box3(
-                    new THREE.Vector3(-0.5, -1.5, -0.4),
-                    new THREE.Vector3(0.5, 0.0, 0.4)
+                    new THREE.Vector3(-0.8, -2.5, -0.6),
+                    new THREE.Vector3(0.8, -0.5, 0.6)
                 )
             }
         };
@@ -706,7 +711,8 @@
             );
             
             outlinePass.edgeStrength = 3.0;
-            outlinePass.edgeStrength = 3.0;
+            outlinePass.edgeGlow = 1.0;
+            outlinePass.edgeThickness = 1.5;
             outlinePass.edgeGlow = 1.0;
             outlinePass.edgeThickness = 1.5;
             outlinePass.pulsePeriod = 2; // Pulsing outline effect
@@ -1113,15 +1119,27 @@
                 const clickPoint = intersects[0].point;
                 console.log('Click Point:', clickPoint);
                 
-                // Determine which body part was clicked
-                const partId = getBodyPartAtPoint(clickPoint);
+                // IMPROVED PART SELECTION: Always select a body part even if not in a specific zone
+                // First try to find a specific part
+                let partId = getBodyPartAtPoint(clickPoint);
                 
-                if (partId) {
-                    selectBodyPart(partId, clickPoint);
-                } else {
-                    // Clicked on model but not on a defined body part
-                    clearBodyPartSelection();
+                // If no specific part found, determine based on Y position
+                if (!partId) {
+                    const y = clickPoint.y;
+                    if (y > 1.5) {
+                        partId = 'head';
+                    } else if (y > 0.5) {
+                        partId = 'chest';
+                    } else if (y > -0.5) {
+                        partId = 'abdomen';
+                    } else {
+                        partId = 'legs';
+                    }
+                    console.log(`No specific zone found, using Y position: ${y} → ${partId}`);
                 }
+                
+                // Always select a part
+                selectBodyPart(partId, clickPoint);
             } else {
                 // Clicked on background
                 clearBodyPartSelection();
@@ -1248,12 +1266,13 @@
         function updateARLabelsPositions() {
             if (!model || !camera) return;
             
-            // Define 3D positions for labels
+            // Define 3D positions for labels relative to model
+            // IMPROVED POSITIONS based on screenshot
             const labelPositions = {
-                head: new THREE.Vector3(0, 2.8, 0),
-                torso: new THREE.Vector3(0.6, 1.7, 0),
-                arm: new THREE.Vector3(-1.2, 1.5, 0),
-                leg: new THREE.Vector3(0.6, -0.5, 0)
+                head: new THREE.Vector3(-0.8, 2.5, 0),      // CEPHALIC REGION - moved higher and left
+                torso: new THREE.Vector3(1.2, 0.8, 0),      // THORACIC CAVITY - moved higher and right
+                arm: new THREE.Vector3(-1.5, 0.5, 0),       // UPPER LIMB - moved higher and further left
+                leg: new THREE.Vector3(1.0, -2.0, 0)        // LOWER LIMB - moved lower and right
             };
             
             // Update each label's screen position
@@ -1271,7 +1290,7 @@
                     const y = (-(vector.y * 0.5) + 0.5) * canvasContainer.clientHeight;
                     
                     // Update position
-                    element.style.left = (label.includes('right') ? x + 40 : x - 40) + 'px';
+                    element.style.left = x + 'px';
                     element.style.top = y + 'px';
                     
                     // Make sure it's visible
@@ -1295,6 +1314,44 @@
             // Update AR label positions
             updateARLabelsPositions();
         }
+
+        // --- Debug Helper Function ---
+        function debugBodyParts() {
+            console.log("Current model position:", model.position);
+            
+            // Log all the zones
+            for (const [partId, data] of Object.entries(bodyPartsData)) {
+                console.log(`${partId} zone:`, 
+                    `Min(${data.zone.min.x.toFixed(2)}, ${data.zone.min.y.toFixed(2)}, ${data.zone.min.z.toFixed(2)})`,
+                    `Max(${data.zone.max.x.toFixed(2)}, ${data.zone.max.y.toFixed(2)}, ${data.zone.max.z.toFixed(2)})`
+                );
+            }
+            
+            // Create visual helpers for debugging
+            scene.children.forEach(child => {
+                if (child.isBox3Helper) scene.remove(child);
+            });
+            
+            for (const [partId, data] of Object.entries(bodyPartsData)) {
+                const color = {
+                    head: 0xff0000,
+                    chest: 0x00ff00,
+                    abdomen: 0x0000ff,
+                    leftArm: 0xffff00,
+                    rightArm: 0xff00ff,
+                    legs: 0x00ffff
+                }[partId] || 0xffffff;
+                
+                const helper = new THREE.Box3Helper(data.zone, color);
+                scene.add(helper);
+            }
+            
+            console.log("Added zone helpers to scene - they should now be visible");
+            return "Debug helpers added";
+        }
+
+        // Make debug function available globally
+        window.debugBodyParts = debugBodyParts;
 
         // --- Start ---
         if (document.readyState === 'loading') {
