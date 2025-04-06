@@ -9,7 +9,8 @@
         /* Basic styling */
         body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; }
         #canvas-container { flex-grow: 1; height: 100vh; position: relative; }
-        #canvas-container canvas { display: block; width: 100%; height: 100%; }
+        #canvas-container canvas { display: block; width: 100%; height: 100%; cursor: grab; } /* Add grab cursor */
+        #canvas-container canvas:active { cursor: grabbing; } /* Add grabbing cursor */
         #info-panel {
             width: 300px; /* Adjust width as needed */
             height: 100vh;
@@ -21,20 +22,11 @@
             color: white; font-size: 1.2em; background-color: rgba(0,0,0,0.5);
             padding: 10px 15px; border-radius: 8px; display: none; z-index: 10;
         }
-        /* Style for controls guide */
         #controls-guide {
-            position: absolute; /* Relative to canvas-container */
-            bottom: 1rem; /* 4 */
-            right: 1rem; /* 4 */
-            background-color: rgba(31, 41, 55, 0.8); /* gray-800 with opacity */
-            color: white;
-            font-size: 0.75rem; /* text-xs */
-            line-height: 1rem;
-            padding: 0.75rem; /* p-3 */
-            border-radius: 0.5rem; /* rounded-lg */
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* shadow-md */
-            z-index: 10;
-            pointer-events: none; /* Allow clicks to pass through */
+            position: absolute; bottom: 1rem; right: 1rem;
+            background-color: rgba(31, 41, 55, 0.8); color: white; font-size: 0.75rem;
+            line-height: 1rem; padding: 0.75rem; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            z-index: 10; pointer-events: none; /* Allow clicks to pass through */
         }
     </style>
 </head>
@@ -70,7 +62,6 @@
     </script>
 
     <script type="module">
-        // Import necessary Three.js modules
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -86,14 +77,32 @@
         const loadingIndicator = document.getElementById('loading-indicator');
 
         // --- Bounding Box Zones ---
-        // *** Adjust these values to fit your model accurately ***
-        const headZone = new THREE.Box3(new THREE.Vector3(-0.4, 2.4, -0.4), new THREE.Vector3(0.4, 3.1, 0.4));
-        const torsoZone = new THREE.Box3(new THREE.Vector3(-0.5, 0.9, -0.35), new THREE.Vector3(0.5, 2.4, 0.35));
-        const leftArmZone = new THREE.Box3(new THREE.Vector3(-1.0, 0.8, -0.4), new THREE.Vector3(-0.4, 2.3, 0.4));
-        const rightArmZone = new THREE.Box3(new THREE.Vector3(0.4, 0.8, -0.4), new THREE.Vector3(1.0, 2.3, 0.4));
-        const legsZone = new THREE.Box3(new THREE.Vector3(-0.5, 0.0, -0.4), new THREE.Vector3(0.5, 1.0, 0.4));
+        // === IMPORTANT: ADJUST THESE VALUES TO FIT YOUR MODEL ===
+        // You can visualize these boxes by uncommenting the "Visualize Bounding Boxes"
+        // section later in the code (inside the loader.load success callback).
+        const headZone = new THREE.Box3(
+            new THREE.Vector3(-0.4, 2.4, -0.4), // Min(x, y, z)
+            new THREE.Vector3(0.4, 3.1, 0.4)    // Max(x, y, z)
+        );
+        const torsoZone = new THREE.Box3(
+            new THREE.Vector3(-0.5, 0.9, -0.35),
+            new THREE.Vector3(0.5, 2.4, 0.35)
+        );
+        const leftArmZone = new THREE.Box3(
+            new THREE.Vector3(-1.0, 0.8, -0.4),
+            new THREE.Vector3(-0.4, 2.3, 0.4)
+        );
+        const rightArmZone = new THREE.Box3(
+            new THREE.Vector3(0.4, 0.8, -0.4),
+            new THREE.Vector3(1.0, 2.3, 0.4)
+        );
+        const legsZone = new THREE.Box3(
+            new THREE.Vector3(-0.5, 0.0, -0.4),
+            new THREE.Vector3(0.5, 1.0, 0.4)
+        );
+        // ========================================================
 
-        // Array for easier iteration when placing dots
+        // Array for iterating zones
         const clickableZones = [
             { zone: headZone, name: 'Head' },
             { zone: torsoZone, name: 'Torso / Chest' },
@@ -103,8 +112,12 @@
         ];
 
         // --- Dot Visualization ---
-        const dotGeometry = new THREE.SphereGeometry(0.04, 16, 8); // Small sphere
-        const dotMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8 }); // Red, slightly transparent
+        // Made dots slightly larger and changed color
+        const dotGeometry = new THREE.SphereGeometry(0.05, 16, 8); // Slightly larger radius
+        const dotMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Yellow, opaque
+
+        // To hold optional visual helpers for the zones
+        let zoneHelpers = [];
 
 
         // --- Initialization ---
@@ -116,13 +129,13 @@
             camera.position.set(0, 1.2, 5); // Initial position before model load
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
-            // *** Quick Win: Limit Pixel Ratio ***
+            // Limit Pixel Ratio
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
             renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
             canvasContainer.appendChild(renderer.domElement);
 
             // Lights
-            // *** Quick Win: Use HemisphereLight ***
+            // Use HemisphereLight
             const hemiLight = new THREE.HemisphereLight(0xadcafc, 0x404040, 1.5); // Soft sky/ground light
             scene.add(hemiLight);
             // Keep directional lights for highlights/shadows
@@ -164,10 +177,10 @@
                     const desiredHeight = 3.0;
                     const scale = desiredHeight / maxDim;
                     model.scale.set(scale, scale, scale);
-                    box.setFromObject(model);
-                    box.getCenter(center);
-                    model.position.sub(center);
-                    model.position.y += (size.y * scale / 2);
+                    box.setFromObject(model); // Recalculate box after scaling
+                    box.getCenter(center); // Update center
+                    model.position.sub(center); // Move center to origin
+                    model.position.y += (size.y * scale / 2); // Lift model base to y=0
                     scene.add(model);
 
                     // Update controls target and save initial state for reset
@@ -178,7 +191,7 @@
                     controls.saveState(); // Save state for potential controls.reset() use
                     controls.update();
 
-                    // *** Add Clickable Zone Dots ***
+                    // Add Zone Dots
                     clickableZones.forEach(item => {
                         const zoneCenter = item.zone.getCenter(new THREE.Vector3());
                         const dotMesh = new THREE.Mesh(dotGeometry, dotMaterial);
@@ -188,6 +201,25 @@
                         scene.add(dotMesh);
                     });
                     console.log("Added zone markers to scene.");
+
+
+                    // --- Optional: Visualize Bounding Boxes ---
+                    // === UNCOMMENT THE CODE BLOCK BELOW TO SEE THE ZONES ===
+                    // This helps adjust the Box3 coordinates above for better accuracy.
+                    // Remember to comment it back out for the final version.
+                    /*
+                    console.log("Adding zone helpers (colored boxes)...");
+                    const colors = { Head: 0xff0000, 'Torso / Chest': 0x00ff00, 'Left Arm': 0x0000ff, 'Right Arm': 0xffff00, 'Legs / Lower Body': 0xff00ff };
+                    zoneHelpers = []; // Clear previous helpers if any
+                    clickableZones.forEach(item => {
+                        const helperColor = colors[item.name] || 0x888888; // Default gray
+                        const helper = new THREE.Box3Helper(item.zone, helperColor);
+                        scene.add(helper);
+                        zoneHelpers.push(helper); // Store helper if you need to remove/update later
+                    });
+                    console.log("Zone helpers added to scene.");
+                    */
+                    // ========================================================
 
 
                     console.log('Model loaded successfully. Scaled height approx:', size.y * scale);
@@ -207,7 +239,7 @@
             // Event Listeners
             window.addEventListener('resize', onWindowResize);
             canvasContainer.addEventListener('click', onClick);
-            // *** Quick Win: Double-click listener ***
+            // Double-click listener
             canvasContainer.addEventListener('dblclick', onDoubleClick);
 
             animate();
@@ -233,7 +265,7 @@
 
         // --- Handle Click ---
         function onClick(event) {
-            if (!model) return;
+            if (!model) return; // Model not loaded yet
 
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -245,14 +277,16 @@
             const intersects = raycaster.intersectObject(model, true);
 
             if (intersects.length > 0) {
+                // Get the exact 3D point of intersection on the model surface
                 const clickPoint = intersects[0].point;
                 console.log('Click Point Coordinates:', clickPoint);
 
-                let partName = 'Unknown Area';
-                // *** Expanded Placeholder Descriptions ***
-                let description = 'This part of the model is not specifically classified. Try clicking near one of the red dots.';
+                let partName = 'Unknown Area'; // Default
+                // Expanded Placeholder Descriptions
+                let description = 'This part of the model is not specifically classified. Try clicking near one of the yellow dots, or adjust the bounding zones in the code.';
 
-                // Check zones
+                // Check which predefined zone contains the click point
+                // Order matters: check smaller/more specific zones first if they overlap
                 if (headZone.containsPoint(clickPoint)) {
                     partName = 'Head';
                     description = 'The head houses the brain, responsible for thought, memory, and controlling body functions. It also contains primary sensory organs like the eyes (vision), ears (hearing), nose (smell), and mouth (taste, speech, breathing). Key structures include the skull, brain, face, and neck attachment.';
@@ -263,16 +297,19 @@
                     partName = 'Right Arm';
                     description = 'The right arm, similar in structure to the left, extends from the shoulder to the hand. It includes the humerus, radius, ulna, wrist, and hand. It facilitates interaction with the environment through reaching, lifting, and manipulation.';
                 } else if (torsoZone.containsPoint(clickPoint)) {
+                    // Check torso after arms in case arms overlap torso zone slightly
                     partName = 'Torso / Chest';
                     description = 'The torso is the central part of the body, connecting the head, neck, and limbs. It contains the chest cavity (heart, lungs, esophagus protected by ribs) and the abdominal cavity (stomach, intestines, liver, kidneys, etc.). It plays a vital role in protecting organs and enabling movement.';
                 } else if (legsZone.containsPoint(clickPoint)) {
                     partName = 'Legs / Lower Body';
                     description = 'The legs support the body and enable locomotion (walking, running, jumping). Each leg consists of the thigh (femur), knee joint, lower leg (tibia, fibula), ankle, and foot. Strong muscles power movement and maintain balance.';
                 }
+                // Add more 'else if' conditions here if you define more zones
 
                 updateInfoPanel(partName, description);
 
             } else {
+                // Clicked on the background
                 updateInfoPanel('', 'Click on a body part in the model. Double-click to reset view.');
             }
         }
@@ -280,29 +317,30 @@
         // --- Update Info Panel ---
         function updateInfoPanel(title, text) {
             const displayTitle = title || 'Info';
-            // *** Quick Win: Improved Styling/Structure ***
+            // Improved Styling/Structure
             infoContent.innerHTML = `
-                <div class="bg-gray-700 p-4 rounded-md shadow">
-                    <h3 class="text-xl font-semibold mb-2 text-blue-300 border-b border-gray-600 pb-1">${displayTitle}</h3>
+                <div class="bg-gray-700 p-4 rounded-md shadow space-y-2">
+                    <h3 class="text-xl font-semibold text-yellow-300 border-b border-gray-600 pb-1">${displayTitle}</h3>
                     <p class="text-gray-200 leading-relaxed text-sm">${text || 'Select a part for details.'}</p>
                 </div>
             `;
-             if (!title && !text) {
+             if (!title && !text) { // Handle case where both are empty (e.g., background click)
                  infoContent.innerHTML = `<p class="text-gray-400">Click on a body part. Double-click to reset view.</p>`;
-             } else if (!title) {
-                 // Fallback if only text is provided (shouldn't happen often with current logic)
-                 infoContent.innerHTML = `<div class="bg-gray-700 p-3 rounded-md shadow"><p class="text-gray-200 leading-relaxed text-sm">${text}</p></div>`;
+             } else if (!title) { // Handle case where only title is missing
+                 infoContent.innerHTML = `<div class="bg-gray-700 p-3 rounded-md shadow space-y-2"><p class="text-gray-200 leading-relaxed text-sm">${text}</p></div>`;
              }
         }
+
 
         // --- Animation Loop ---
         function animate() {
             requestAnimationFrame(animate);
-            if (controls) controls.update();
-            if (renderer) renderer.render(scene, camera);
+            if (controls) controls.update(); // Update controls if damping enabled
+            if (renderer) renderer.render(scene, camera); // Render the scene
         }
 
         // --- Start ---
+        // Ensure DOM is fully loaded before initializing Three.js
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
