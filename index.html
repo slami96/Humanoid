@@ -500,8 +500,8 @@
           "Stores energy in the form of glycogen and fat"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.8, 0.5, -0.5),
-          new THREE.Vector3(0.8, 1.5, 0.5)
+          new THREE.Vector3(-0.4, 0.0, -0.3),  // Moved lower and narrower
+          new THREE.Vector3(0.4, 0.5, 0.3)     // Made vertically smaller
         )
       },
       leftArm: {
@@ -651,7 +651,8 @@
       composer.addPass(renderPass);
       bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.2, 0.2, 0.9);
       composer.addPass(bloomPass);
-      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
+      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth
+                                                      , window.innerHeight), scene, camera);
       outlinePass.edgeStrength = 3.0;
       outlinePass.edgeGlow = 1.0;
       outlinePass.edgeThickness = 1.5;
@@ -792,6 +793,8 @@
         color = 0x0000ff; // Blue for legs
       } else if (partId === 'head') {
         color = 0xffff00; // Yellow for head
+      } else if (partId === 'abdomen') {
+        color = 0xff00ff; // Magenta for abdomen
       }
       
       const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
@@ -1058,17 +1061,16 @@
       }
     }
 
-    // --- Get Body Part At Point with EXTREMELY aggressive arm detection ---
+    // --- Get Body Part At Point with EXTREMELY aggressive arm and abdomen detection ---
     function getBodyPartAtPoint(point) {
       // Debug: Log the point coordinates for troubleshooting
       console.log('Checking point:', point);
       
-      // EXTREMELY AGGRESSIVE ARM DETECTION
-      // This will override the chest detection when x is far enough from center
       const y = point.y;
       const x = point.x;
       
-      // If we're in the arm height range (between abdomen and head)
+      // EXTREMELY AGGRESSIVE ARM DETECTION
+      // This will override the chest detection when x is far enough from center
       if (y > 0.5 && y < 2.6) {
         // Far left = left arm (no matter what other detections say)
         if (x < -0.5) {
@@ -1081,6 +1083,12 @@
           console.log('Aggressive arm detection: rightArm');
           return 'rightArm';
         }
+      }
+      
+      // Special case for abdomen to make it more central
+      if (Math.abs(x) < 0.4 && y > 0.0 && y < 0.5) {
+        console.log('Direct abdomen detection');
+        return 'abdomen';
       }
       
       // Standard detection for all parts
@@ -1157,7 +1165,22 @@
             }
           }
         });
-      } else {
+      } 
+      // Special case for abdomen to ensure correct selection
+      else if (partId === 'abdomen') {
+        model.traverse((object) => {
+          if (object.isMesh) {
+            const meshPosition = new THREE.Vector3();
+            object.getWorldPosition(meshPosition);
+            
+            // For abdomen, check if the mesh is in the central area
+            if (Math.abs(meshPosition.x) < 0.5 && meshPosition.y > -0.1 && meshPosition.y < 0.6) {
+              selectedObjects.push(object);
+            }
+          }
+        });
+      }
+      else {
         // For non-arm parts, use the standard zone-based approach
         model.traverse((object) => {
           if (object.isMesh) {
@@ -1299,4 +1322,3 @@
   </script>
 </body>
 </html>
-        
