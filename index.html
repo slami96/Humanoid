@@ -560,7 +560,7 @@
           "Assists in generating force for physical activities"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.6, -1.8, -0.5),
+          new THREE.Vector3(-0.6, -1.0, -0.5),  // FIXED: Raised Y minimum from -1.8 to -1.0
           new THREE.Vector3(-0.1, 0.5, 0.5)
         )
       },
@@ -580,7 +580,7 @@
           "Assists in generating force for physical activities"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(0.1, -1.8, -0.5),
+          new THREE.Vector3(0.1, -1.0, -0.5),  // FIXED: Raised Y minimum from -1.8 to -1.0
           new THREE.Vector3(0.6, 0.5, 0.5)
         )
       }
@@ -649,7 +649,8 @@
       composer = new EffectComposer(renderer);
       const renderPass = new RenderPass(scene, camera);
       composer.addPass(renderPass);
-      bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.2, 0.2, 0.9);
+      bloomPass = new UnrealBloomPass(new
+                                      bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.2, 0.2, 0.9);
       composer.addPass(bloomPass);
       outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
       outlinePass.edgeStrength = 3.0;
