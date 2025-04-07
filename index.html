@@ -500,8 +500,8 @@
           "Stores energy in the form of glycogen and fat"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.4, 0.0, -0.3),  // Moved lower and narrower
-          new THREE.Vector3(0.4, 0.5, 0.3)     // Made vertically smaller
+          new THREE.Vector3(-0.4, 0.7, -0.3),  // Much higher Y position (0.7 instead of 0.0)
+          new THREE.Vector3(0.4, 1.2, 0.3)     // Upper limit also higher (1.2 instead of 0.5)
         )
       },
       leftArm: {
@@ -650,9 +650,9 @@
       const renderPass = new RenderPass(scene, camera);
       composer.addPass(renderPass);
       bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.2, 0.2, 0.9);
-      composer.addPass(bloomPass);
-      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth
-                                                      , window.innerHeight), scene, camera);
+      composer.addPass(bloomPass
+                       );
+      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
       outlinePass.edgeStrength = 3.0;
       outlinePass.edgeGlow = 1.0;
       outlinePass.edgeThickness = 1.5;
@@ -1085,8 +1085,8 @@
         }
       }
       
-      // Special case for abdomen to make it more central
-      if (Math.abs(x) < 0.4 && y > 0.0 && y < 0.5) {
+      // Special case for abdomen to make it more central - with CORRECTED height
+      if (Math.abs(x) < 0.4 && y > 0.7 && y < 1.2) {
         console.log('Direct abdomen detection');
         return 'abdomen';
       }
@@ -1166,7 +1166,7 @@
           }
         });
       } 
-      // Special case for abdomen to ensure correct selection
+      // Special case for abdomen to ensure correct selection - CORRECTED height
       else if (partId === 'abdomen') {
         model.traverse((object) => {
           if (object.isMesh) {
@@ -1174,7 +1174,7 @@
             object.getWorldPosition(meshPosition);
             
             // For abdomen, check if the mesh is in the central area
-            if (Math.abs(meshPosition.x) < 0.5 && meshPosition.y > -0.1 && meshPosition.y < 0.6) {
+            if (Math.abs(meshPosition.x) < 0.5 && meshPosition.y > 0.7 && meshPosition.y < 1.2) {
               selectedObjects.push(object);
             }
           }
