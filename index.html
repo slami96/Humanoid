@@ -651,8 +651,7 @@
       composer.addPass(renderPass);
       bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.2, 0.2, 0.9);
       composer.addPass(bloomPass);
-      outlinePass = new OutlinePass(new THREE.Vector2(window.
-                                                      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
+      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
       outlinePass.edgeStrength = 3.0;
       outlinePass.edgeGlow = 1.0;
       outlinePass.edgeThickness = 1.5;
