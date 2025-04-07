@@ -359,7 +359,7 @@
           <span>SYSTEM</span>: <span id="system-status" class="text-green-400">STANDBY</span>
         </div>
         <div class="text-xs">
-          <span>ORGANS MAPPED</span>: <span class="text-yellow-400">5</span>
+          <span>ORGANS MAPPED</span>: <span class="text-yellow-400">7</span>
         </div>
       </div>
       <!-- Scan Line Animation -->
@@ -379,6 +379,7 @@
           <span>ZOOM</span><span class="text-gray-300">Mouse Wheel</span>
           <span>PAN</span><span class="text-gray-300">Right Mouse / Drag</span>
           <span>RESET VIEW</span><span class="text-gray-300">Double Click</span>
+          <span>DEBUG ZONES</span><span class="text-gray-300">Press 'Z'</span>
         </div>
       </div>
     </div>
@@ -441,7 +442,7 @@
     const soundHover = document.getElementById('sound-hover');
     const soundScan = document.getElementById('sound-scan');
 
-    // Detailed information for each body part
+    // Detailed information for each body part with improved zone coordinates
     const bodyPartsData = {
       head: {
         name: "Head",
@@ -459,8 +460,8 @@
           "Protects the brain from trauma"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.4, 2.4, -0.4),
-          new THREE.Vector3(0.4, 3.1, 0.4)
+          new THREE.Vector3(-0.3, 1.4, -0.3),
+          new THREE.Vector3(0.3, 1.9, 0.3)
         )
       },
       chest: {
@@ -479,8 +480,8 @@
           "Supports upper body mobility"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.5, 0.9, -0.35),
-          new THREE.Vector3(0.5, 2.4, 0.35)
+          new THREE.Vector3(-0.4, 0.7, -0.3),
+          new THREE.Vector3(0.4, 1.4, 0.3)
         )
       },
       abdomen: {
@@ -499,8 +500,8 @@
           "Stores energy in the form of glycogen and fat"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.5, 0.0, -0.35),
-          new THREE.Vector3(0.5, 0.9, 0.35)
+          new THREE.Vector3(-0.4, 0.2, -0.3),
+          new THREE.Vector3(0.4, 0.7, 0.3)
         )
       },
       leftArm: {
@@ -519,8 +520,8 @@
           "Enables pushing and pulling motions"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-1.0, 0.8, -0.4),
-          new THREE.Vector3(-0.4, 2.3, 0.4)
+          new THREE.Vector3(-0.7, 0.7, -0.3),
+          new THREE.Vector3(-0.3, 1.4, 0.3)
         )
       },
       rightArm: {
@@ -539,12 +540,12 @@
           "Enables pushing and pulling motions"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(0.4, 0.8, -0.4),
-          new THREE.Vector3(1.0, 2.3, 0.4)
+          new THREE.Vector3(0.3, 0.7, -0.3),
+          new THREE.Vector3(0.7, 1.4, 0.3)
         )
       },
-      legs: {
-        name: "Legs",
+      leftLeg: {
+        name: "Left Leg",
         system: "Musculoskeletal System",
         description: `
           <p>The legs are composed of the thigh (containing the femur, the body's longest bone), the knee joint, the lower leg (tibia and fibula), and the ankle and foot.</p>
@@ -559,8 +560,28 @@
           "Assists in generating force for physical activities"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.5, -1.5, -0.4),
-          new THREE.Vector3(0.5, 0.0, 0.4)
+          new THREE.Vector3(-0.4, -0.8, -0.3),
+          new THREE.Vector3(-0.1, 0.2, 0.3)
+        )
+      },
+      rightLeg: {
+        name: "Right Leg",
+        system: "Musculoskeletal System",
+        description: `
+          <p>The legs are composed of the thigh (containing the femur, the body's longest bone), the knee joint, the lower leg (tibia and fibula), and the ankle and foot.</p>
+          <p>Powerful muscles in the legs, including the quadriceps and hamstrings, enable standing, walking, running, and jumping, while also supporting the body's weight.</p>
+        `,
+        composition: ["Femur", "Tibia", "Fibula", "Patella", "Muscles", "Tendons", "Joints"],
+        functions: [
+          "Supports body weight",
+          "Enables locomotion (walking, running, jumping)",
+          "Maintains balance and stability",
+          "Absorbs impact during movement",
+          "Assists in generating force for physical activities"
+        ],
+        zone: new THREE.Box3(
+          new THREE.Vector3(0.1, -0.8, -0.3),
+          new THREE.Vector3(0.4, 0.2, 0.3)
         )
       }
     };
@@ -630,7 +651,8 @@
       composer.addPass(renderPass);
       bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.2, 0.2, 0.9);
       composer.addPass(bloomPass);
-      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
+      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth,
+                                                      window.innerHeight), scene, camera);
       outlinePass.edgeStrength = 3.0;
       outlinePass.edgeGlow = 1.0;
       outlinePass.edgeThickness = 1.5;
@@ -725,7 +747,7 @@
       );
     }
 
-    // --- Optimize and Center Model ---
+    // --- Optimize and Center Model with improved zone handling ---
     function optimizeAndCenterModel(model) {
       const box = new THREE.Box3().setFromObject(model);
       const center = box.getCenter(new THREE.Vector3());
@@ -740,32 +762,35 @@
       model.position.sub(center);
       model.position.y += box.max.y - center.y;
       
-      // Store the model's final position and scale for debugging and zone calculations
+      // Store the model's final position and scale
       model.userData.finalScale = scale;
       model.userData.finalPosition = model.position.clone();
       
-      // Properly update bounding boxes for all body parts based on the model's transformation
+      console.log('Model scaled and centered. Scale:', scale, 'Position:', model.position);
+      console.log('Model bounding box:', box.min, box.max);
+      
+      // Update all body part zones with the model's transformation
       Object.keys(bodyPartsData).forEach(part => {
         const zone = bodyPartsData[part].zone;
-        // Create fresh bounding boxes with the original values
+        
+        // Scale the zone based on the model scale
         const newMin = new THREE.Vector3().copy(zone.min).multiplyScalar(scale);
         const newMax = new THREE.Vector3().copy(zone.max).multiplyScalar(scale);
         
-        // Create a new box3 with the scaled dimensions
+        // Create a new box with the scaled values
         const newZone = new THREE.Box3(newMin, newMax);
         
         // Apply the model's position offset
         newZone.translate(model.position);
         
-        // Replace the original zone with the new one
+        // Replace the original zone
         bodyPartsData[part].zone = newZone;
+        
+        console.log(`${part} zone:`, newZone.min, newZone.max);
       });
-      
-      console.log('Model scaled and centered. Scale:', scale, 'Position:', model.position);
-      console.log('Updated body part zones:', bodyPartsData);
     }
 
-    // Optional: Add this function to visualize the zones for debugging
+    // --- Add visual debug box for zones ---
     function addDebugBox(partId, box) {
       const size = new THREE.Vector3();
       box.getSize(size);
@@ -785,6 +810,22 @@
       debugBox.position.copy(center);
       debugBox.name = 'debug_' + partId;
       scene.add(debugBox);
+      
+      // Add a text label if using TextSprite
+      if (typeof TextSprite !== 'undefined') {
+        const label = new TextSprite({
+          text: partId,
+          alignment: 'center',
+          color: '#ffffff',
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          fontWeight: 'bold',
+          fontSize: 10
+        });
+        label.position.copy(center);
+        label.position.y += size.y / 2 + 0.1;
+        label.name = 'debug_label_' + partId;
+        scene.add(label);
+      }
     }
 
     // --- Apply Sci-Fi Material Effect ---
@@ -807,7 +848,7 @@
 
     // --- Update Controls For Model ---
     function updateControlsForModel() {
-      controls.target.set(model.position.x, model.position.y + 1.5, model.position.z);
+      controls.target.set(model.position.x, model.position.y + 1.0, model.position.z);
       controls.update();
       initialCameraPosition.copy(camera.position);
       initialControlsTarget.copy(controls.target);
@@ -875,6 +916,7 @@
           </p>
           <p class="text-gray-300 text-sm mt-2">
             Use your mouse to rotate the model. Scroll to zoom in/out. Double-click to reset the view.
+            Press 'Z' key to visualize interaction zones.
           </p>
         </div>
       `;
@@ -896,6 +938,64 @@
           infoPanel.classList.toggle('collapsed');
         });
       }
+      
+      // Add keyboard listener for zone visualization toggle
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'z' || event.key === 'Z') {
+          let zonesVisible = scene.children.some(child => 
+            child.name && child.name.startsWith('debug_')
+          );
+          
+          if (zonesVisible) {
+            // Hide zones
+            scene.children.forEach(child => {
+              if (child.name && child.name.startsWith('debug_')) {
+                scene.remove(child);
+              }
+            });
+            console.log('Zone visualization disabled');
+          } else {
+            // Show zones
+            showAllZones();
+          }
+        }
+      });
+    }
+
+    // --- Visualization of all zones for debugging ---
+    function showAllZones() {
+      // First clear any existing debug boxes
+      scene.children.forEach(child => {
+        if (child.name && child.name.startsWith('debug_')) {
+          scene.remove(child);
+        }
+      });
+      
+      // Create a debug box for each body part zone
+      Object.keys(bodyPartsData).forEach(part => {
+        const zone = bodyPartsData[part].zone;
+        const size = new THREE.Vector3();
+        zone.getSize(size);
+        
+        const center = new THREE.Vector3();
+        zone.getCenter(center);
+        
+        // Create a wireframe box
+        const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+        const material = new THREE.MeshBasicMaterial({
+          color: 0xff0000,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.5
+        });
+        
+        const debugBox = new THREE.Mesh(geometry, material);
+        debugBox.position.copy(center);
+        debugBox.name = 'debug_' + part;
+        scene.add(debugBox);
+      });
+      
+      console.log('Zone visualization enabled');
     }
 
     // --- Handle Window Resize ---
@@ -966,9 +1066,10 @@
       }
     }
 
-    // --- Handle Click ---
+    // --- Improved Click Handler ---
     function onClick(event) {
       if (!model) return;
+      
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -980,84 +1081,60 @@
         const clickPoint = intersects[0].point;
         console.log('Click Point:', clickPoint);
         
-        // Try to get body part directly
-        let partId = getBodyPartAtPoint(clickPoint);
-        
-        // If that fails, check if we're clicking on a specific mesh that might be a body part
-        if (!partId && intersects[0].object && intersects[0].object.name) {
-          // Check if the mesh name contains any of our body part names
-          const meshName = intersects[0].object.name.toLowerCase();
-          for (const part in bodyPartsData) {
-            if (meshName.includes(part) || 
-                meshName.includes(bodyPartsData[part].name.toLowerCase())) {
-              partId = part;
-              console.log('Found part by mesh name:', partId);
-              break;
-            }
-          }
-        }
+        // Try to get body part using the improved function
+        const partId = getBodyPartAtPoint(clickPoint);
         
         if (partId) {
           selectBodyPart(partId, clickPoint);
         } else {
-          // If direct hit and name matching fails, try closest part as a fallback
-          const closestPart = getClosestBodyPart(clickPoint);
-          if (closestPart) {
-            selectBodyPart(closestPart, clickPoint);
-          } else {
-            console.log('Clicked on model but no specific part identified');
-          }
+          console.log('Clicked on model but no part identified');
         }
       } else {
         clearBodyPartSelection();
       }
     }
 
-    // Helper method to find closest body part
-    function getClosestBodyPart(point) {
+    // --- Get Body Part At Point with improved detection ---
+    function getBodyPartAtPoint(point) {
+      // Debug: Log the point coordinates for troubleshooting
+      console.log('Checking point:', point);
+      
+      // First try: Check if point is directly within any zone (with tolerance)
+      const tolerance = 0.3;
+      for (const partId in bodyPartsData) {
+        const zone = bodyPartsData[partId].zone.clone();
+        zone.expandByScalar(tolerance);
+        
+        if (zone.containsPoint(point)) {
+          console.log('Direct hit on zone:', partId);
+          return partId;
+        }
+      }
+      
+      // Second try: Find the closest part based on distance to zone center
       let closestPart = null;
       let minDistance = Infinity;
       
       for (const partId in bodyPartsData) {
-        const zone = bodyPartsData[partId].zone;
         const zoneCenter = new THREE.Vector3();
-        zone.getCenter(zoneCenter);
+        bodyPartsData[partId].zone.getCenter(zoneCenter);
         
         const distance = point.distanceTo(zoneCenter);
+        console.log(`Distance to ${partId}: ${distance.toFixed(3)}`);
+        
         if (distance < minDistance) {
           minDistance = distance;
           closestPart = partId;
         }
       }
       
-      // Only use closest part if it's within a reasonable distance
-      if (minDistance < 1.5) {
-        console.log('Using closest part:', closestPart, 'distance:', minDistance);
+      // Use closest part if it's within a reasonable distance
+      if (minDistance < 0.8) {
+        console.log(`Using closest part: ${closestPart}, distance: ${minDistance.toFixed(3)}`);
         return closestPart;
       }
       
-      return null;
-    }
-
-    // --- Get Body Part At Point (with tolerance) ---
-    function getBodyPartAtPoint(point) {
-      // First, try exact zone matching with increased tolerance
-      const tolerance = 0.3; // Increase tolerance for easier selection
-      
-      // Debug: Log the point to troubleshoot
-      console.log('Checking point:', point);
-      
-      for (const partId in bodyPartsData) {
-        const zone = bodyPartsData[partId].zone.clone();
-        // Expand the zone slightly for easier selection
-        zone.expandByScalar(tolerance);
-        
-        if (zone.containsPoint(point)) {
-          console.log('Found matching zone:', partId);
-          return partId;
-        }
-      }
-      
+      console.log('No body part found at point');
       return null;
     }
 
@@ -1071,32 +1148,69 @@
       if (selectedPart === partId) return;
       selectedPart = partId;
       updateSystemStatus('ANALYZING', 'yellow');
+      
+      // Try to select meshes that are within the zone of the selected part
       const selectedObjects = [];
       model.traverse((object) => {
         if (object.isMesh) {
           const meshPosition = new THREE.Vector3();
           object.getWorldPosition(meshPosition);
-          if (bodyPartsData[partId].zone.containsPoint(meshPosition)) {
+          
+          // Use extended zone for selection to be more inclusive
+          const extendedZone = bodyPartsData[partId].zone.clone().expandByScalar(0.2);
+          if (extendedZone.containsPoint(meshPosition)) {
             selectedObjects.push(object);
           }
         }
       });
       
-      // If no meshes were selected by zone, highlight the entire model as fallback
+      // If no meshes were selected by zone, try alternative methods
       if (selectedObjects.length === 0) {
+        console.log(`Using closest part: ${partId}, distance: ${0}`);
         console.log('No meshes in zone, selecting by object names for', partId);
-        // Try matching by name for fallback selection
+        
+        // First try: select by part name in mesh name
         model.traverse((object) => {
           if (object.isMesh) {
             const meshName = object.name.toLowerCase();
             const partName = bodyPartsData[partId].name.toLowerCase();
-            if (meshName.includes(partId) || meshName.includes(partName)) {
+            if (
+              meshName.includes(partId) || 
+              meshName.includes(partName) ||
+              (partId === 'head' && (meshName.includes('head') || meshName.includes('skull') || meshName.includes('face'))) ||
+              (partId === 'chest' && (meshName.includes('chest') || meshName.includes('torso') || meshName.includes('rib'))) ||
+              (partId === 'abdomen' && (meshName.includes('abdomen') || meshName.includes('stomach') || meshName.includes('waist'))) ||
+              (partId.includes('arm') && (meshName.includes('arm') || meshName.includes('hand') || meshName.includes('shoulder'))) ||
+              (partId.includes('leg') && (meshName.includes('leg') || meshName.includes('thigh') || meshName.includes('foot')))
+            ) {
               selectedObjects.push(object);
             }
           }
         });
         
-        // If still no objects found, just highlight any visible mesh as last resort
+        // If still no objects found, highlight everything near that region
+        if (selectedObjects.length === 0) {
+          console.log('No matching meshes by name, selecting by proximity');
+          
+          // Calculate center of the body part zone
+          const zoneCenter = new THREE.Vector3();
+          bodyPartsData[partId].zone.getCenter(zoneCenter);
+          
+          // Find meshes that are close to the center of the zone
+          model.traverse((object) => {
+            if (object.isMesh) {
+              const meshPosition = new THREE.Vector3();
+              object.getWorldPosition(meshPosition);
+              
+              const distance = meshPosition.distanceTo(zoneCenter);
+              if (distance < 1.0) { // Use a larger distance threshold
+                selectedObjects.push(object);
+              }
+            }
+          });
+        }
+        
+        // Last resort: if still no objects found, just highlight any visible mesh
         if (selectedObjects.length === 0) {
           model.traverse((object) => {
             if (object.isMesh && object.visible) {
@@ -1110,6 +1224,7 @@
       if (clickPoint) {
         updateTrackerPosition(clickPoint);
       }
+      
       const partInfo = bodyPartsData[partId];
       let infoHtml = `
         <div class="sci-panel p-4 mb-4 info-card">
@@ -1190,88 +1305,11 @@
       updateARLabelsPositions();
     }
 
-    // Add diagnostic function to help debug zone issues (comment out in production)
-    function diagnoseZones() {
-      // Create a diagnostic panel
-      const debugPanel = document.createElement('div');
-      debugPanel.style.position = 'absolute';
-      debugPanel.style.top = '10px';
-      debugPanel.style.right = '10px';
-      debugPanel.style.backgroundColor = 'rgba(0,0,0,0.7)';
-      debugPanel.style.color = 'white';
-      debugPanel.style.padding = '10px';
-      debugPanel.style.maxWidth = '300px';
-      debugPanel.style.maxHeight = '400px';
-      debugPanel.style.overflow = 'auto';
-      debugPanel.style.zIndex = '1000';
-      debugPanel.style.fontSize = '12px';
-      debugPanel.style.fontFamily = 'monospace';
-      
-      // Add a title and close button
-      debugPanel.innerHTML = `
-        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
-          <strong>Zone Diagnostics</strong>
-          <button id="close-debug" style="background:none;border:none;color:white;cursor:pointer;">×</button>
-        </div>
-        <div id="zone-debug-content"></div>
-        <div style="margin-top:10px;">
-          <button id="toggle-zone-vis" style="background:#333;border:1px solid #666;color:white;padding:3px 6px;">
-            Show/Hide Zone Boxes
-          </button>
-        </div>
-      `;
-      
-      document.body.appendChild(debugPanel);
-      
-      // Populate zone data
-      const content = document.getElementById('zone-debug-content');
-      for (const partId in bodyPartsData) {
-        const zone = bodyPartsData[partId].zone;
-        const min = zone.min.toArray().map(v => v.toFixed(2)).join(', ');
-        const max = zone.max.toArray().map(v => v.toFixed(2)).join(', ');
-        
-        content.innerHTML += `
-          <div style="margin-bottom:8px;border-bottom:1px solid #555;padding-bottom:5px;">
-            <strong>${bodyPartsData[partId].name}</strong><br>
-            min: ${min}<br>
-            max: ${max}
-          </div>
-        `;
-      }
-      
-      // Add event listeners
-      document.getElementById('close-debug').addEventListener('click', () => {
-        document.body.removeChild(debugPanel);
-      });
-      
-      let zonesVisible = false;
-      document.getElementById('toggle-zone-vis').addEventListener('click', () => {
-        zonesVisible = !zonesVisible;
-        
-        if (zonesVisible) {
-          // Add visualization boxes for all zones
-          Object.keys(bodyPartsData).forEach(part => {
-            addDebugBox(part, bodyPartsData[part].zone);
-          });
-        } else {
-          // Remove all visualization boxes
-          scene.children.forEach(child => {
-            if (child.name && child.name.startsWith('debug_')) {
-              scene.remove(child);
-            }
-          });
-        }
-      });
-    }
-
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', init);
     } else {
       init();
     }
-    
-    // Uncomment the line below for debugging zones
-    // setTimeout(() => diagnoseZones(), 5000);
   </script>
 </body>
 </html>
