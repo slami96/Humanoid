@@ -1058,13 +1058,33 @@
       }
     }
 
-    // --- Get Body Part At Point with special arm detection ---
+    // --- Get Body Part At Point with EXTREMELY aggressive arm detection ---
     function getBodyPartAtPoint(point) {
       // Debug: Log the point coordinates for troubleshooting
       console.log('Checking point:', point);
       
-      // First try: Check if point is directly within any zone (with tolerance)
-      const tolerance = 0.4; // Increased tolerance for easier selection
+      // EXTREMELY AGGRESSIVE ARM DETECTION
+      // This will override the chest detection when x is far enough from center
+      const y = point.y;
+      const x = point.x;
+      
+      // If we're in the arm height range (between abdomen and head)
+      if (y > 0.5 && y < 2.6) {
+        // Far left = left arm (no matter what other detections say)
+        if (x < -0.5) {
+          console.log('Aggressive arm detection: leftArm');
+          return 'leftArm';
+        }
+        
+        // Far right = right arm (no matter what other detections say)
+        if (x > 0.5) {
+          console.log('Aggressive arm detection: rightArm');
+          return 'rightArm';
+        }
+      }
+      
+      // Standard detection for all parts
+      const tolerance = 0.3;
       for (const partId in bodyPartsData) {
         const zone = bodyPartsData[partId].zone.clone();
         zone.expandByScalar(tolerance);
@@ -1075,18 +1095,7 @@
         }
       }
       
-      // Special check for arms since they can be thinner and harder to click
-      // Check if the point is close to the left or right side of the model
-      if (point.x < -0.4 && point.y > 0.5 && point.y < 2.6) {
-        console.log('Special case detection: leftArm');
-        return 'leftArm';
-      }
-      if (point.x > 0.4 && point.y > 0.5 && point.y < 2.6) {
-        console.log('Special case detection: rightArm');
-        return 'rightArm';
-      }
-      
-      // Second try: Find the closest part based on distance to zone center
+      // Find closest part if no direct hit
       let closestPart = null;
       let minDistance = Infinity;
       
@@ -1097,17 +1106,14 @@
         const distance = point.distanceTo(zoneCenter);
         console.log(`Distance to ${partId}: ${distance.toFixed(3)}`);
         
-        // Give extra weight to arm detection (multiply distance by 0.8 to make arms "closer")
-        const adjustedDistance = partId.includes('Arm') ? distance * 0.8 : distance;
-        
-        if (adjustedDistance < minDistance) {
-          minDistance = adjustedDistance;
+        if (distance < minDistance) {
+          minDistance = distance;
           closestPart = partId;
         }
       }
       
       // Use closest part if it's within a reasonable distance
-      if (minDistance < 1.8) { // Increased from 1.5 to 1.8 for better detection
+      if (minDistance < 1.5) {
         console.log(`Using closest part: ${closestPart}, distance: ${minDistance.toFixed(3)}`);
         return closestPart;
       }
@@ -1293,3 +1299,4 @@
   </script>
 </body>
 </html>
+        
