@@ -441,8 +441,7 @@
     const soundHover = document.getElementById('sound-hover');
     const soundScan = document.getElementById('sound-scan');
 
-    // Detailed information for each body part.
-    // Adjusted the Z coordinates by +1.6 units to match the actual model orientation.
+    // Detailed information for each body part
     const bodyPartsData = {
       head: {
         name: "Head",
@@ -459,11 +458,9 @@
           "Initiates digestion through the mouth",
           "Protects the brain from trauma"
         ],
-        // Original zone was roughly (-0.4,2.4,-0.4) to (0.4,3.1,0.4).
-        // Here we add +1.6 to the z-values.
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.4, 2.4, 1.2),
-          new THREE.Vector3(0.4, 3.1, 2.0)
+          new THREE.Vector3(-0.4, 2.4, -0.4),
+          new THREE.Vector3(0.4, 3.1, 0.4)
         )
       },
       chest: {
@@ -482,8 +479,8 @@
           "Supports upper body mobility"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.5, 0.9, 1.2),
-          new THREE.Vector3(0.5, 2.4, 2.0)
+          new THREE.Vector3(-0.5, 0.9, -0.35),
+          new THREE.Vector3(0.5, 2.4, 0.35)
         )
       },
       abdomen: {
@@ -502,8 +499,8 @@
           "Stores energy in the form of glycogen and fat"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.5, 0.0, 1.2),
-          new THREE.Vector3(0.5, 0.9, 2.0)
+          new THREE.Vector3(-0.5, 0.0, -0.35),
+          new THREE.Vector3(0.5, 0.9, 0.35)
         )
       },
       leftArm: {
@@ -522,8 +519,8 @@
           "Enables pushing and pulling motions"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-1.0, 0.8, 1.2),
-          new THREE.Vector3(-0.4, 2.3, 2.0)
+          new THREE.Vector3(-1.0, 0.8, -0.4),
+          new THREE.Vector3(-0.4, 2.3, 0.4)
         )
       },
       rightArm: {
@@ -542,8 +539,8 @@
           "Enables pushing and pulling motions"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(0.4, 0.8, 1.2),
-          new THREE.Vector3(1.0, 2.3, 2.0)
+          new THREE.Vector3(0.4, 0.8, -0.4),
+          new THREE.Vector3(1.0, 2.3, 0.4)
         )
       },
       legs: {
@@ -562,8 +559,8 @@
           "Assists in generating force for physical activities"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.5, -1.5, 1.2),
-          new THREE.Vector3(0.5, 0.0, 2.0)
+          new THREE.Vector3(-0.5, -1.5, -0.4),
+          new THREE.Vector3(0.5, 0.0, 0.4)
         )
       }
     };
@@ -734,4 +731,341 @@
       const center = box.getCenter(new THREE.Vector3());
       const size = box.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z);
-      const desiredHeight = 3.0
+      const desiredHeight = 3.0;
+      const scale = desiredHeight / maxDim;
+      model.scale.set(scale, scale, scale);
+      box.setFromObject(model);
+      box.getCenter(center);
+      model.position.sub(center);
+      model.position.y += box.max.y - center.y;
+      // Update bounding boxes for all body parts based on the model's transformation
+      Object.keys(bodyPartsData).forEach(part => {
+        bodyPartsData[part].zone.min.multiplyScalar(scale);
+        bodyPartsData[part].zone.max.multiplyScalar(scale);
+        bodyPartsData[part].zone.translate(model.position);
+      });
+      console.log('Model scaled and centered.');
+    }
+
+    // --- Apply Sci-Fi Material Effect ---
+    function applySciFiMaterial(model) {
+      model.traverse((node) => {
+        if (node.isMesh) {
+          node.castShadow = true;
+          node.receiveShadow = true;
+          const material = node.material.clone();
+          material.metalness = 0.3;
+          material.roughness = 0.4;
+          material.envMapIntensity = 1.0;
+          if (material.color) {
+            material.color.lerp(new THREE.Color(0x4060ff), 0.2);
+          }
+          node.material = material;
+        }
+      });
+    }
+
+    // --- Update Controls For Model ---
+    function updateControlsForModel() {
+      controls.target.set(model.position.x, model.position.y + 1.5, model.position.z);
+      controls.update();
+      initialCameraPosition.copy(camera.position);
+      initialControlsTarget.copy(controls.target);
+    }
+
+    // --- Complete Loading Process ---
+    function completeLoading() {
+      setTimeout(startScanAnimation, 1000);
+      loadingOverlay.style.transition = 'opacity 1s';
+      loadingOverlay.style.opacity = '0';
+      setTimeout(() => {
+        loadingOverlay.style.display = 'none';
+      }, 1000);
+      updateSystemStatus('SCANNING', 'green');
+      showWelcomeInfo();
+    }
+
+    // --- Start Scan Animation ---
+    function startScanAnimation() {
+      if (audioEnabled) {
+        soundScan.volume = 0.3;
+        soundScan.play();
+      }
+      controls.autoRotate = true;
+      setTimeout(() => { controls.autoRotate = false; }, 5000);
+      setTimeout(() => showLabel('head'), 500);
+      setTimeout(() => showLabel('torso'), 1000);
+      setTimeout(() => showLabel('arm'), 1500);
+      setTimeout(() => showLabel('leg'), 2000);
+      setTimeout(() => { updateSystemStatus('READY', 'green'); }, 3000);
+    }
+
+    // --- Show AR Label ---
+    function showLabel(label) {
+      if (arLabels[label]) {
+        arLabels[label].style.opacity = '1';
+      }
+    }
+
+    // --- Update System Status ---
+    function updateSystemStatus(status, color) {
+      systemStatus.textContent = status;
+      systemStatus.className = '';
+      if (color === 'green') {
+        systemStatus.classList.add('text-green-400');
+      } else if (color === 'yellow') {
+        systemStatus.classList.add('text-yellow-400');
+      } else if (color === 'red') {
+        systemStatus.classList.add('text-red-400');
+      }
+    }
+
+    // --- Show Welcome Info ---
+    function showWelcomeInfo() {
+      infoContent.innerHTML = `
+        <div class="sci-panel p-4 info-card">
+          <div class="text-sm text-indigo-300 mb-1">SYSTEM READY</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Welcome to Human Anatomy Explorer</h3>
+          <p class="text-gray-300 text-sm">
+            This interactive 3D model allows you to explore human anatomy. Click on different
+            body parts to learn about their structure and function.
+          </p>
+          <p class="text-gray-300 text-sm mt-2">
+            Use your mouse to rotate the model. Scroll to zoom in/out. Double-click to reset the view.
+          </p>
+        </div>
+      `;
+      setTimeout(() => {
+        document.querySelectorAll('.info-card').forEach(card => {
+          card.classList.add('show');
+        });
+      }, 100);
+    }
+
+    // --- Setup Event Listeners ---
+    function setupEventListeners() {
+      window.addEventListener('resize', onWindowResize);
+      canvasContainer.addEventListener('click', onClick);
+      canvasContainer.addEventListener('dblclick', onDoubleClick);
+      canvasContainer.addEventListener('mousemove', onMouseMove);
+      if (panelToggle) {
+        panelToggle.addEventListener('click', () => {
+          infoPanel.classList.toggle('collapsed');
+        });
+      }
+    }
+
+    // --- Handle Window Resize ---
+    function onWindowResize() {
+      if (!renderer || !camera || !canvasContainer) return;
+      camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+      composer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+      updateARLabelsPositions();
+    }
+
+    // --- Handle Double Click (Reset View) ---
+    function onDoubleClick() {
+      if (!controls || !initialCameraPosition || !initialControlsTarget) return;
+      if (audioEnabled) {
+        soundClick.volume = 0.2;
+        soundClick.play();
+      }
+      camera.position.copy(initialCameraPosition);
+      controls.target.copy(initialControlsTarget);
+      controls.update();
+      updateSystemStatus('VIEW RESET', 'yellow');
+      setTimeout(() => updateSystemStatus('READY', 'green'), 2000);
+    }
+
+    // --- Handle Mouse Move ---
+    function onMouseMove(event) {
+      if (!model) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(model, true);
+      if (intersects.length > 0) {
+        document.body.style.cursor = 'pointer';
+        const clickPoint = intersects[0].point;
+        const hoveredPart = getBodyPartAtPoint(clickPoint);
+        if (hoveredPart && hoveredPart !== selectedPart) {
+          updateTrackerPosition(clickPoint);
+          if (audioEnabled && Math.random() > 0.95) {
+            soundHover.volume = 0.1;
+            soundHover.play();
+          }
+        }
+      } else {
+        document.body.style.cursor = 'default';
+        hideTracker();
+      }
+    }
+
+    // --- Update Tracker Position ---
+    function updateTrackerPosition(position) {
+      if (!tracker) return;
+      const vector = new THREE.Vector3(position.x, position.y, position.z);
+      vector.project(camera);
+      const x = (vector.x * 0.5 + 0.5) * canvasContainer.clientWidth;
+      const y = (-(vector.y * 0.5) + 0.5) * canvasContainer.clientHeight;
+      tracker.style.left = x + 'px';
+      tracker.style.top = y + 'px';
+      tracker.style.opacity = '1';
+    }
+
+    // --- Hide Tracker ---
+    function hideTracker() {
+      if (tracker) {
+        tracker.style.opacity = '0';
+      }
+    }
+
+    // --- Handle Click ---
+    function onClick(event) {
+      if (!model) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(model, true);
+      if (intersects.length > 0) {
+        const clickPoint = intersects[0].point;
+        console.log('Click Point:', clickPoint);
+        const partId = getBodyPartAtPoint(clickPoint);
+        if (partId) {
+          selectBodyPart(partId, clickPoint);
+        } else {
+          clearBodyPartSelection();
+        }
+      } else {
+        clearBodyPartSelection();
+      }
+    }
+
+    // --- Get Body Part At Point (with tolerance) ---
+    function getBodyPartAtPoint(point) {
+      const tolerance = 0.1; // Increase the size of the zone for easier selection
+      for (const partId in bodyPartsData) {
+        const zone = bodyPartsData[partId].zone.clone().expandByScalar(tolerance);
+        if (zone.containsPoint(point)) {
+          return partId;
+        }
+      }
+      return null;
+    }
+
+    // --- Select Body Part ---
+    function selectBodyPart(partId, clickPoint) {
+      if (audioEnabled) {
+        soundClick.volume = 0.3;
+        soundClick.currentTime = 0;
+        soundClick.play();
+      }
+      if (selectedPart === partId) return;
+      selectedPart = partId;
+      updateSystemStatus('ANALYZING', 'yellow');
+      const selectedObjects = [];
+      model.traverse((object) => {
+        if (object.isMesh) {
+          const meshPosition = new THREE.Vector3();
+          object.getWorldPosition(meshPosition);
+          if (bodyPartsData[partId].zone.containsPoint(meshPosition)) {
+            selectedObjects.push(object);
+          }
+        }
+      });
+      outlinePass.selectedObjects = selectedObjects;
+      if (clickPoint) {
+        updateTrackerPosition(clickPoint);
+      }
+      const partInfo = bodyPartsData[partId];
+      let infoHtml = `
+        <div class="sci-panel p-4 mb-4 info-card">
+          <div class="flex justify-between items-center mb-2">
+            <div class="text-xs text-indigo-300">${partInfo.system}</div>
+            <div class="sci-badge">${partInfo.name}</div>
+          </div>
+          <div class="text-gray-300 text-sm">
+            ${partInfo.description}
+          </div>
+        </div>
+        <div class="sci-panel p-4 info-card">
+          <div class="text-xs text-indigo-300 mb-2">KEY COMPONENTS</div>
+          <div class="flex flex-wrap gap-1 mb-3">
+            ${partInfo.composition.map(item => `<span class="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded-md">${item}</span>`).join('')}
+          </div>
+          <div class="text-xs text-indigo-300 mb-2 mt-4">FUNCTIONS</div>
+          <ul class="space-y-1">
+            ${partInfo.functions.map(func => `<li class="flex items-start text-sm"><span class="text-indigo-400 mr-2">•</span><span class="text-gray-300">${func}</span></li>`).join('')}
+          </ul>
+        </div>
+      `;
+      infoContent.innerHTML = infoHtml;
+      setTimeout(() => {
+        document.querySelectorAll('.info-card').forEach((card, index) => {
+          setTimeout(() => {
+            card.classList.add('show');
+          }, index * 100);
+        });
+      }, 100);
+      infoPanel.classList.remove('collapsed');
+      setTimeout(() => {
+        updateSystemStatus('READY', 'green');
+      }, 1000);
+    }
+
+    // --- Clear Body Part Selection ---
+    function clearBodyPartSelection() {
+      selectedPart = null;
+      outlinePass.selectedObjects = [];
+      hideTracker();
+      showWelcomeInfo();
+    }
+
+    // --- Update AR Labels Positions (Raised) ---
+    function updateARLabelsPositions() {
+      if (!model || !camera) return;
+      // Adjusted positions for labels (raised y-values)
+      const labelPositions = {
+        head: new THREE.Vector3(0, 3.2, 0),
+        torso: new THREE.Vector3(0.6, 2.2, 0),
+        arm: new THREE.Vector3(-1.2, 1.8, 0),
+        leg: new THREE.Vector3(0.6, 0.2, 0)
+      };
+      for (const [label, element] of Object.entries(arLabels)) {
+        if (element && labelPositions[label]) {
+          const position = labelPositions[label].clone();
+          position.add(model.position);
+          const vector = position.project(camera);
+          const x = (vector.x * 0.5 + 0.5) * canvasContainer.clientWidth;
+          const y = (-(vector.y * 0.5) + 0.5) * canvasContainer.clientHeight;
+          element.style.left = (label.includes('right') ? x + 40 : x - 40) + 'px';
+          element.style.top = y + 'px';
+          element.style.display = vector.z < 1 ? 'block' : 'none';
+        }
+      }
+    }
+
+    // --- Animation Loop ---
+    function animate() {
+      requestAnimationFrame(animate);
+      if (controls) {
+        controls.update();
+      }
+      if (composer && scene && camera) {
+        composer.render();
+      }
+      updateARLabelsPositions();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+</html>
