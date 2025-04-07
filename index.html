@@ -733,18 +733,58 @@
       const maxDim = Math.max(size.x, size.y, size.z);
       const desiredHeight = 3.0;
       const scale = desiredHeight / maxDim;
+      
       model.scale.set(scale, scale, scale);
       box.setFromObject(model);
       box.getCenter(center);
       model.position.sub(center);
       model.position.y += box.max.y - center.y;
-      // Update bounding boxes for all body parts based on the model's transformation
+      
+      // Store the model's final position and scale for debugging and zone calculations
+      model.userData.finalScale = scale;
+      model.userData.finalPosition = model.position.clone();
+      
+      // Properly update bounding boxes for all body parts based on the model's transformation
       Object.keys(bodyPartsData).forEach(part => {
-        bodyPartsData[part].zone.min.multiplyScalar(scale);
-        bodyPartsData[part].zone.max.multiplyScalar(scale);
-        bodyPartsData[part].zone.translate(model.position);
+        const zone = bodyPartsData[part].zone;
+        // Create fresh bounding boxes with the original values
+        const newMin = new THREE.Vector3().copy(zone.min).multiplyScalar(scale);
+        const newMax = new THREE.Vector3().copy(zone.max).multiplyScalar(scale);
+        
+        // Create a new box3 with the scaled dimensions
+        const newZone = new THREE.Box3(newMin, newMax);
+        
+        // Apply the model's position offset
+        newZone.translate(model.position);
+        
+        // Replace the original zone with the new one
+        bodyPartsData[part].zone = newZone;
       });
-      console.log('Model scaled and centered.');
+      
+      console.log('Model scaled and centered. Scale:', scale, 'Position:', model.position);
+      console.log('Updated body part zones:', bodyPartsData);
+    }
+
+    // Optional: Add this function to visualize the zones for debugging
+    function addDebugBox(partId, box) {
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      
+      const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xff0000,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.3
+      });
+      
+      const debugBox = new THREE.Mesh(geometry, material);
+      debugBox.position.copy(center);
+      debugBox.name = 'debug_' + partId;
+      scene.add(debugBox);
     }
 
     // --- Apply Sci-Fi Material Effect ---
@@ -789,7 +829,10 @@
     function startScanAnimation() {
       if (audioEnabled) {
         soundScan.volume = 0.3;
-        soundScan.play();
+        soundScan.play().catch(e => {
+          console.warn("Auto-play prevented:", e);
+          audioEnabled = false;
+        });
       }
       controls.autoRotate = true;
       setTimeout(() => { controls.autoRotate = false; }, 5000);
@@ -870,7 +913,7 @@
       if (!controls || !initialCameraPosition || !initialControlsTarget) return;
       if (audioEnabled) {
         soundClick.volume = 0.2;
-        soundClick.play();
+        soundClick.play().catch(e => console.warn("Audio play prevented:", e));
       }
       camera.position.copy(initialCameraPosition);
       controls.target.copy(initialControlsTarget);
@@ -895,7 +938,7 @@
           updateTrackerPosition(clickPoint);
           if (audioEnabled && Math.random() > 0.95) {
             soundHover.volume = 0.1;
-            soundHover.play();
+            soundHover.play().catch(e => console.warn("Audio play prevented:", e));
           }
         }
       } else {
@@ -929,31 +972,92 @@
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
       raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObject(model, true);
+      
       if (intersects.length > 0) {
         const clickPoint = intersects[0].point;
         console.log('Click Point:', clickPoint);
-        const partId = getBodyPartAtPoint(clickPoint);
+        
+        // Try to get body part directly
+        let partId = getBodyPartAtPoint(clickPoint);
+        
+        // If that fails, check if we're clicking on a specific mesh that might be a body part
+        if (!partId && intersects[0].object && intersects[0].object.name) {
+          // Check if the mesh name contains any of our body part names
+          const meshName = intersects[0].object.name.toLowerCase();
+          for (const part in bodyPartsData) {
+            if (meshName.includes(part) || 
+                meshName.includes(bodyPartsData[part].name.toLowerCase())) {
+              partId = part;
+              console.log('Found part by mesh name:', partId);
+              break;
+            }
+          }
+        }
+        
         if (partId) {
           selectBodyPart(partId, clickPoint);
         } else {
-          clearBodyPartSelection();
+          // If direct hit and name matching fails, try closest part as a fallback
+          const closestPart = getClosestBodyPart(clickPoint);
+          if (closestPart) {
+            selectBodyPart(closestPart, clickPoint);
+          } else {
+            console.log('Clicked on model but no specific part identified');
+          }
         }
       } else {
         clearBodyPartSelection();
       }
     }
 
+    // Helper method to find closest body part
+    function getClosestBodyPart(point) {
+      let closestPart = null;
+      let minDistance = Infinity;
+      
+      for (const partId in bodyPartsData) {
+        const zone = bodyPartsData[partId].zone;
+        const zoneCenter = new THREE.Vector3();
+        zone.getCenter(zoneCenter);
+        
+        const distance = point.distanceTo(zoneCenter);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestPart = partId;
+        }
+      }
+      
+      // Only use closest part if it's within a reasonable distance
+      if (minDistance < 1.5) {
+        console.log('Using closest part:', closestPart, 'distance:', minDistance);
+        return closestPart;
+      }
+      
+      return null;
+    }
+
     // --- Get Body Part At Point (with tolerance) ---
     function getBodyPartAtPoint(point) {
-      const tolerance = 0.1; // Increase the size of the zone for easier selection
+      // First, try exact zone matching with increased tolerance
+      const tolerance = 0.3; // Increase tolerance for easier selection
+      
+      // Debug: Log the point to troubleshoot
+      console.log('Checking point:', point);
+      
       for (const partId in bodyPartsData) {
-        const zone = bodyPartsData[partId].zone.clone().expandByScalar(tolerance);
+        const zone = bodyPartsData[partId].zone.clone();
+        // Expand the zone slightly for easier selection
+        zone.expandByScalar(tolerance);
+        
         if (zone.containsPoint(point)) {
+          console.log('Found matching zone:', partId);
           return partId;
         }
       }
+      
       return null;
     }
 
@@ -962,7 +1066,7 @@
       if (audioEnabled) {
         soundClick.volume = 0.3;
         soundClick.currentTime = 0;
-        soundClick.play();
+        soundClick.play().catch(e => console.warn("Audio play prevented:", e));
       }
       if (selectedPart === partId) return;
       selectedPart = partId;
@@ -977,6 +1081,31 @@
           }
         }
       });
+      
+      // If no meshes were selected by zone, highlight the entire model as fallback
+      if (selectedObjects.length === 0) {
+        console.log('No meshes in zone, selecting by object names for', partId);
+        // Try matching by name for fallback selection
+        model.traverse((object) => {
+          if (object.isMesh) {
+            const meshName = object.name.toLowerCase();
+            const partName = bodyPartsData[partId].name.toLowerCase();
+            if (meshName.includes(partId) || meshName.includes(partName)) {
+              selectedObjects.push(object);
+            }
+          }
+        });
+        
+        // If still no objects found, just highlight any visible mesh as last resort
+        if (selectedObjects.length === 0) {
+          model.traverse((object) => {
+            if (object.isMesh && object.visible) {
+              selectedObjects.push(object);
+            }
+          });
+        }
+      }
+      
       outlinePass.selectedObjects = selectedObjects;
       if (clickPoint) {
         updateTrackerPosition(clickPoint);
@@ -1061,11 +1190,88 @@
       updateARLabelsPositions();
     }
 
+    // Add diagnostic function to help debug zone issues (comment out in production)
+    function diagnoseZones() {
+      // Create a diagnostic panel
+      const debugPanel = document.createElement('div');
+      debugPanel.style.position = 'absolute';
+      debugPanel.style.top = '10px';
+      debugPanel.style.right = '10px';
+      debugPanel.style.backgroundColor = 'rgba(0,0,0,0.7)';
+      debugPanel.style.color = 'white';
+      debugPanel.style.padding = '10px';
+      debugPanel.style.maxWidth = '300px';
+      debugPanel.style.maxHeight = '400px';
+      debugPanel.style.overflow = 'auto';
+      debugPanel.style.zIndex = '1000';
+      debugPanel.style.fontSize = '12px';
+      debugPanel.style.fontFamily = 'monospace';
+      
+      // Add a title and close button
+      debugPanel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <strong>Zone Diagnostics</strong>
+          <button id="close-debug" style="background:none;border:none;color:white;cursor:pointer;">×</button>
+        </div>
+        <div id="zone-debug-content"></div>
+        <div style="margin-top:10px;">
+          <button id="toggle-zone-vis" style="background:#333;border:1px solid #666;color:white;padding:3px 6px;">
+            Show/Hide Zone Boxes
+          </button>
+        </div>
+      `;
+      
+      document.body.appendChild(debugPanel);
+      
+      // Populate zone data
+      const content = document.getElementById('zone-debug-content');
+      for (const partId in bodyPartsData) {
+        const zone = bodyPartsData[partId].zone;
+        const min = zone.min.toArray().map(v => v.toFixed(2)).join(', ');
+        const max = zone.max.toArray().map(v => v.toFixed(2)).join(', ');
+        
+        content.innerHTML += `
+          <div style="margin-bottom:8px;border-bottom:1px solid #555;padding-bottom:5px;">
+            <strong>${bodyPartsData[partId].name}</strong><br>
+            min: ${min}<br>
+            max: ${max}
+          </div>
+        `;
+      }
+      
+      // Add event listeners
+      document.getElementById('close-debug').addEventListener('click', () => {
+        document.body.removeChild(debugPanel);
+      });
+      
+      let zonesVisible = false;
+      document.getElementById('toggle-zone-vis').addEventListener('click', () => {
+        zonesVisible = !zonesVisible;
+        
+        if (zonesVisible) {
+          // Add visualization boxes for all zones
+          Object.keys(bodyPartsData).forEach(part => {
+            addDebugBox(part, bodyPartsData[part].zone);
+          });
+        } else {
+          // Remove all visualization boxes
+          scene.children.forEach(child => {
+            if (child.name && child.name.startsWith('debug_')) {
+              scene.remove(child);
+            }
+          });
+        }
+      });
+    }
+
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', init);
     } else {
       init();
     }
+    
+    // Uncomment the line below for debugging zones
+    // setTimeout(() => diagnoseZones(), 5000);
   </script>
 </body>
 </html>
