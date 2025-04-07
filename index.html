@@ -442,7 +442,7 @@
     const soundHover = document.getElementById('sound-hover');
     const soundScan = document.getElementById('sound-scan');
 
-    // Detailed information for each body part with proper zone coordinates
+    // Detailed information for each body part with improved zone coordinates
     const bodyPartsData = {
       head: {
         name: "Head",
@@ -520,8 +520,8 @@
           "Enables pushing and pulling motions"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-1.3, 0.5, -0.5),
-          new THREE.Vector3(-0.7, 2.6, 0.5)
+          new THREE.Vector3(-1.5, 0.5, -0.6),
+          new THREE.Vector3(-0.5, 2.6, 0.6)
         )
       },
       rightArm: {
@@ -540,8 +540,8 @@
           "Enables pushing and pulling motions"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(0.7, 0.5, -0.5),
-          new THREE.Vector3(1.3, 2.6, 0.5)
+          new THREE.Vector3(0.5, 0.5, -0.6),
+          new THREE.Vector3(1.5, 2.6, 0.6)
         )
       },
       leftLeg: {
@@ -651,8 +651,7 @@
       composer.addPass(renderPass);
       bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.2, 0.2, 0.9);
       composer.addPass(bloomPass);
-      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth
-                                                      , window.innerHeight), scene, camera);
+      outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
       outlinePass.edgeStrength = 3.0;
       outlinePass.edgeGlow = 1.0;
       outlinePass.edgeThickness = 1.5;
@@ -785,9 +784,19 @@
       const center = new THREE.Vector3();
       box.getCenter(center);
       
+      // Create different colors for different body parts
+      let color = 0xff0000; // Default red
+      if (partId.includes('Arm')) {
+        color = 0x00ff00; // Green for arms
+      } else if (partId.includes('Leg')) {
+        color = 0x0000ff; // Blue for legs
+      } else if (partId === 'head') {
+        color = 0xffff00; // Yellow for head
+      }
+      
       const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
       const material = new THREE.MeshBasicMaterial({
-        color: 0xff0000,
+        color: color,
         wireframe: true,
         transparent: true,
         opacity: 0.5
@@ -797,13 +806,6 @@
       debugBox.position.copy(center);
       debugBox.name = 'debug_' + partId;
       scene.add(debugBox);
-      
-      // Add a small text to identify the part
-      const textMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.8
-      });
       
       console.log(`Added debug box for ${partId} at position ${center.x}, ${center.y}, ${center.z}`);
     }
@@ -1056,13 +1058,13 @@
       }
     }
 
-    // --- Get Body Part At Point with improved detection ---
+    // --- Get Body Part At Point with special arm detection ---
     function getBodyPartAtPoint(point) {
       // Debug: Log the point coordinates for troubleshooting
       console.log('Checking point:', point);
       
       // First try: Check if point is directly within any zone (with tolerance)
-      const tolerance = 0.3;
+      const tolerance = 0.4; // Increased tolerance for easier selection
       for (const partId in bodyPartsData) {
         const zone = bodyPartsData[partId].zone.clone();
         zone.expandByScalar(tolerance);
@@ -1071,6 +1073,17 @@
           console.log('Direct hit on zone:', partId);
           return partId;
         }
+      }
+      
+      // Special check for arms since they can be thinner and harder to click
+      // Check if the point is close to the left or right side of the model
+      if (point.x < -0.4 && point.y > 0.5 && point.y < 2.6) {
+        console.log('Special case detection: leftArm');
+        return 'leftArm';
+      }
+      if (point.x > 0.4 && point.y > 0.5 && point.y < 2.6) {
+        console.log('Special case detection: rightArm');
+        return 'rightArm';
       }
       
       // Second try: Find the closest part based on distance to zone center
@@ -1084,14 +1097,17 @@
         const distance = point.distanceTo(zoneCenter);
         console.log(`Distance to ${partId}: ${distance.toFixed(3)}`);
         
-        if (distance < minDistance) {
-          minDistance = distance;
+        // Give extra weight to arm detection (multiply distance by 0.8 to make arms "closer")
+        const adjustedDistance = partId.includes('Arm') ? distance * 0.8 : distance;
+        
+        if (adjustedDistance < minDistance) {
+          minDistance = adjustedDistance;
           closestPart = partId;
         }
       }
       
       // Use closest part if it's within a reasonable distance
-      if (minDistance < 1.5) {
+      if (minDistance < 1.8) { // Increased from 1.5 to 1.8 for better detection
         console.log(`Using closest part: ${closestPart}, distance: ${minDistance.toFixed(3)}`);
         return closestPart;
       }
@@ -1100,7 +1116,7 @@
       return null;
     }
 
-    // --- Select Body Part ---
+    // --- Select Body Part with improved highlighting ---
     function selectBodyPart(partId, clickPoint) {
       if (audioEnabled) {
         soundClick.volume = 0.3;
@@ -1113,22 +1129,46 @@
       
       // Try to select meshes that are within the zone of the selected part
       const selectedObjects = [];
-      model.traverse((object) => {
-        if (object.isMesh) {
-          const meshPosition = new THREE.Vector3();
-          object.getWorldPosition(meshPosition);
-          
-          // Use extended zone for selection to be more inclusive
-          const extendedZone = bodyPartsData[partId].zone.clone().expandByScalar(0.2);
-          if (extendedZone.containsPoint(meshPosition)) {
-            selectedObjects.push(object);
-          }
-        }
-      });
       
-      // If no meshes were selected by zone, try alternative methods
+      // For arm parts, use special handling
+      if (partId === 'leftArm' || partId === 'rightArm') {
+        // Determine which side to check
+        const isLeft = partId === 'leftArm';
+        const xThreshold = isLeft ? 0 : 0; // Use 0 as the dividing line
+        
+        // Check all meshes 
+        model.traverse((object) => {
+          if (object.isMesh) {
+            const meshPosition = new THREE.Vector3();
+            object.getWorldPosition(meshPosition);
+            
+            // For arms, check if the mesh is on the correct side (left or right)
+            // and in the appropriate height range
+            if ((isLeft && meshPosition.x < xThreshold) || (!isLeft && meshPosition.x > xThreshold)) {
+              if (meshPosition.y > 0.3 && meshPosition.y < 2.7) { // Height range for arms
+                selectedObjects.push(object);
+              }
+            }
+          }
+        });
+      } else {
+        // For non-arm parts, use the standard zone-based approach
+        model.traverse((object) => {
+          if (object.isMesh) {
+            const meshPosition = new THREE.Vector3();
+            object.getWorldPosition(meshPosition);
+            
+            // Use extended zone for selection to be more inclusive
+            const extendedZone = bodyPartsData[partId].zone.clone().expandByScalar(0.3);
+            if (extendedZone.containsPoint(meshPosition)) {
+              selectedObjects.push(object);
+            }
+          }
+        });
+      }
+      
+      // If no meshes were selected, try alternative methods
       if (selectedObjects.length === 0) {
-        console.log(`Using closest part: ${partId}, distance: ${0}`);
         console.log('No meshes in zone, selecting by object names for', partId);
         
         // First try: select by part name in mesh name
@@ -1149,28 +1189,6 @@
             }
           }
         });
-        
-        // If still no objects found, highlight everything near that region
-        if (selectedObjects.length === 0) {
-          console.log('No matching meshes by name, selecting by proximity');
-          
-          // Calculate center of the body part zone
-          const zoneCenter = new THREE.Vector3();
-          bodyPartsData[partId].zone.getCenter(zoneCenter);
-          
-          // Find meshes that are close to the center of the zone
-          model.traverse((object) => {
-            if (object.isMesh) {
-              const meshPosition = new THREE.Vector3();
-              object.getWorldPosition(meshPosition);
-              
-              const distance = meshPosition.distanceTo(zoneCenter);
-              if (distance < 1.0) { // Use a larger distance threshold
-                selectedObjects.push(object);
-              }
-            }
-          });
-        }
         
         // Last resort: if still no objects found, just highlight any visible mesh
         if (selectedObjects.length === 0) {
