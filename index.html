@@ -520,7 +520,7 @@
           "Enables pushing and pulling motions"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-1.5, 0.5, -0.6),
+          new THREE.Vector3(-1.5, 1.2, -0.6),  // FIXED: Raised Y minimum from 0.5 to 1.2
           new THREE.Vector3(-0.5, 2.6, 0.6)
         )
       },
@@ -540,7 +540,7 @@
           "Enables pushing and pulling motions"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(0.5, 0.5, -0.6),
+          new THREE.Vector3(0.5, 1.2, -0.6),  // FIXED: Raised Y minimum from 0.5 to 1.2
           new THREE.Vector3(1.5, 2.6, 0.6)
         )
       },
@@ -560,7 +560,7 @@
           "Assists in generating force for physical activities"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.6, -0.2, -0.5),  // FIXED: Raised Y minimum from -1.0 to -0.2
+          new THREE.Vector3(-0.6, -0.2, -0.5),  // FIXED: Raised Y minimum from -1.8 to -0.2
           new THREE.Vector3(-0.1, 1.0, 0.5)     // FIXED: Raised Y maximum from 0.5 to 1.0 to meet abdomen
         )
       },
@@ -574,13 +574,13 @@
         composition: ["Femur", "Tibia", "Fibula", "Patella", "Muscles", "Tendons", "Joints"],
         functions: [
           "Supports body weight",
-          "Enables locomotion (walking, running, jumping)",
+         "Enables locomotion (walking, running, jumping)",
           "Maintains balance and stability",
           "Absorbs impact during movement",
           "Assists in generating force for physical activities"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(0.1, -0.2, -0.5),  // FIXED: Raised Y minimum from -1.0 to -0.2
+          new THREE.Vector3(0.1, -0.2, -0.5),  // FIXED: Raised Y minimum from -1.8 to -0.2
           new THREE.Vector3(0.6, 1.0, 0.5)     // FIXED: Raised Y maximum from 0.5 to 1.0 to meet abdomen
         )
       }
@@ -1070,7 +1070,7 @@
       
       // EXTREMELY AGGRESSIVE ARM DETECTION
       // This will override the chest detection when x is far enough from center
-      if (y > 0.5 && y < 2.6) {
+      if (y > 1.2 && y < 2.6) {  // FIXED: Raised lower bound from 0.5 to 1.2 to match arm zone
         // Far left = left arm (no matter what other detections say)
         if (x < -0.5) {
           console.log('Aggressive arm detection: leftArm');
@@ -1085,7 +1085,7 @@
       }
       
       // Special case for abdomen to make it more central - with CORRECTED height
-      if (Math.abs(x) < 0.4 && y > 1.0 && y < 1.8) {  // FIXED: Raised both Y values
+      if (Math.abs(x) < 0.4 && y > 1.0 && y < 1.8) {  // Fixed height
         console.log('Direct abdomen detection');
         return 'abdomen';
       }
@@ -1158,7 +1158,7 @@
             // For arms, check if the mesh is on the correct side (left or right)
             // and in the appropriate height range
             if ((isLeft && meshPosition.x < xThreshold) || (!isLeft && meshPosition.x > xThreshold)) {
-              if (meshPosition.y > 0.3 && meshPosition.y < 2.7) { // Height range for arms
+              if (meshPosition.y > 1.2 && meshPosition.y < 2.7) { // FIXED: Updated height range for arms
                 selectedObjects.push(object);
               }
             }
@@ -1173,7 +1173,7 @@
             object.getWorldPosition(meshPosition);
             
             // For abdomen, check if the mesh is in the central area
-            if (Math.abs(meshPosition.x) < 0.5 && meshPosition.y > 1.0 && meshPosition.y < 1.8) {  // FIXED: Raised both Y values
+            if (Math.abs(meshPosition.x) < 0.5 && meshPosition.y > 1.0 && meshPosition.y < 1.8) {  // Fixed height
               selectedObjects.push(object);
             }
           }
@@ -1193,7 +1193,7 @@
             // For legs, check if the mesh is on the correct side (left or right)
             // and in the appropriate height range
             if ((isLeft && meshPosition.x < xThreshold) || (!isLeft && meshPosition.x > xThreshold)) {
-              if (meshPosition.y > -0.2 && meshPosition.y < 1.0) { // FIXED: Updated height range for legs
+              if (meshPosition.y > -0.2 && meshPosition.y < 1.0) { // Updated height range for legs
                 selectedObjects.push(object);
               }
             }
@@ -1342,4 +1342,3 @@
   </script>
 </body>
 </html>
-      
