@@ -560,8 +560,8 @@
           "Assists in generating force for physical activities"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(-0.6, -1.0, -0.5),  // FIXED: Raised Y minimum from -1.8 to -1.0
-          new THREE.Vector3(-0.1, 0.5, 0.5)
+          new THREE.Vector3(-0.6, -0.2, -0.5),  // FIXED: Raised Y minimum from -1.0 to -0.2
+          new THREE.Vector3(-0.1, 1.0, 0.5)     // FIXED: Raised Y maximum from 0.5 to 1.0 to meet abdomen
         )
       },
       rightLeg: {
@@ -580,8 +580,8 @@
           "Assists in generating force for physical activities"
         ],
         zone: new THREE.Box3(
-          new THREE.Vector3(0.1, -1.0, -0.5),  // FIXED: Raised Y minimum from -1.8 to -1.0
-          new THREE.Vector3(0.6, 0.5, 0.5)
+          new THREE.Vector3(0.1, -0.2, -0.5),  // FIXED: Raised Y minimum from -1.0 to -0.2
+          new THREE.Vector3(0.6, 1.0, 0.5)     // FIXED: Raised Y maximum from 0.5 to 1.0 to meet abdomen
         )
       }
     };
@@ -1179,8 +1179,29 @@
           }
         });
       }
+      // Special case for legs with updated height range
+      else if (partId === 'leftLeg' || partId === 'rightLeg') {
+        // Determine which side to check
+        const isLeft = partId === 'leftLeg';
+        const xThreshold = isLeft ? 0 : 0; // Use 0 as the dividing line
+        
+        model.traverse((object) => {
+          if (object.isMesh) {
+            const meshPosition = new THREE.Vector3();
+            object.getWorldPosition(meshPosition);
+            
+            // For legs, check if the mesh is on the correct side (left or right)
+            // and in the appropriate height range
+            if ((isLeft && meshPosition.x < xThreshold) || (!isLeft && meshPosition.x > xThreshold)) {
+              if (meshPosition.y > -0.2 && meshPosition.y < 1.0) { // FIXED: Updated height range for legs
+                selectedObjects.push(object);
+              }
+            }
+          }
+        });
+      }
       else {
-        // For non-arm parts, use the standard zone-based approach
+        // For non-arm/non-leg parts, use the standard zone-based approach
         model.traverse((object) => {
           if (object.isMesh) {
             const meshPosition = new THREE.Vector3();
@@ -1321,3 +1342,4 @@
   </script>
 </body>
 </html>
+      
